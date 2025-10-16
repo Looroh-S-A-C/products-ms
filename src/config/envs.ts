@@ -31,3 +31,4 @@ export const envs = {
   databaseUrl: envVars.DATABASE_URL,
   natServers: envVars.NATS_SERVERS,
 };
+
