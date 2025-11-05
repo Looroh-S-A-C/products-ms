@@ -3,6 +3,7 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { envs } from './config';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { RpcExceptionInterceptor } from './common';
 
 async function bootstrap() {
   const logger = new Logger('Main');
@@ -22,6 +23,8 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+
+  app.useGlobalInterceptors(new RpcExceptionInterceptor());
   await app.listen();
   logger.log(`Products Microservice running on port ${envs.port}`);
 }

@@ -1,26 +1,448 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
+// schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-model Product {
-  id        Int       @id @default(autoincrement())
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  OUT_OF_STOCK
+}
+
+enum MenuType {
+  IN_DINNER
+  DELIVERY
+  PICKUP
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TEXT
+  NUMBER
+  BOOLEAN
+}
+
+enum QuestionProductType {
+  QUESTION
+  ANSWER
+}
+
+model Chain {
+  /// Single chain configuration (you mentioned one chain per system)
+  id         String    @id @default(uuid())
+  name       String
+  currency   String    @default("PEN")
+  taxPercent Float     @default(0.0) // impuesto global de la cadena
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+  createdBy  String?
+  updatedBy  String?
+  deletedBy  String?
+
+  restaurants Restaurant[]
+}
+
+model Restaurant {
+  id        String    @id @default(uuid())
+  chain     Chain     @relation(fields: [chainId], references: [id])
+  chainId   String
   name      String
-  price     Float
-  available Boolean   @default(true)
+  address   String?
+  phone     String?
+  timezone  String?
+  status    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  // Catalog & menus
+  menus       Menu[]
+  // Inventory & per-restaurant product overrides
+  inventories RestaurantInventory[]
+
+  @@index([chainId])
+}
+
+model Product {
+  id          String        @id @default(uuid())
+  sku         String?       @unique
+  name        String
+  description String?
+  basePrice   Decimal       @db.Decimal(8, 2)
+  status      ProductStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  deletedAt   DateTime?
+  createdBy   String?
+  updatedBy   String?
+  deletedBy   String?
+
+  // canonical product data
+  sizes        ProductSize[]
+  translations Translation[]
+  images       ProductImage[]
+  tags         ProductTag[]
+  schedules    ProductSchedule[]
+  recipe       ProductRecipe[]
+
+  // menus where this product is used
+  menuItems MenuItem[]
+
+  // per-restaurant inventory relation (inverse)
+  inventories RestaurantInventory[]
+
+  // questions and answers relationship
+  questionProducts QuestionProduct[]
+
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model Category {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+  status      Boolean @default(true)
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  @@index([available, deletedAt])
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  menuCategories MenuCategory[]
+  translations   Translation[]
+
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model Translation {
+  id           String  @id @default(uuid())
+  languageCode String
+  name         String
+  description  String?
+
+  // Relaciones polimórficas
+  categoryId String?
+  productId  String?
+  questionId String?
+
+  category Category? @relation(fields: [categoryId], references: [id])
+  product  Product?  @relation(fields: [productId], references: [id])
+  question Question? @relation(fields: [questionId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([categoryId, languageCode])
+  @@unique([productId, languageCode])
+  @@unique([questionId, languageCode])
+  @@index([categoryId])
+  @@index([productId])
+  @@index([questionId])
+}
+
+model ProductSize {
+  id        String    @id @default(uuid())
+  product   Product   @relation(fields: [productId], references: [id])
+  productId String
+  name      String
+  // canonical suggested price for this size (can be overridden at menu level)
+  price     Decimal   @db.Decimal(8, 2)
+  status    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([productId])
+  @@index([status])
+}
+
+model ProductImage {
+  id        String    @id @default(uuid())
+  url       String
+  isPrimary Boolean   @default(false)
+  product   Product   @relation(fields: [productId], references: [id])
+  productId String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([productId])
+}
+
+model Tag {
+  id        String       @id @default(uuid())
+  name      String
+  products  ProductTag[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  deletedAt DateTime?
+
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  @@unique([name])
+  @@index([deletedAt])
+}
+
+model ProductTag {
+  product   Product @relation(fields: [productId], references: [id])
+  productId String
+  tag       Tag     @relation(fields: [tagId], references: [id])
+  tagId     String
+
+  @@id([productId, tagId])
+}
+
+model Tax {
+  id         String    @id @default(uuid())
+  name       String
+  percentage Float
+  status     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+  // optionally link categories if needed
+
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model ProductSchedule {
+  id        String  @id @default(uuid())
+  product   Product @relation(fields: [productId], references: [id])
+  productId String
+  dayOfWeek Int // 0..6 (Sun..Sat) or 1..7, pick one in impl
+  startTime String // "18:00"
+  endTime   String // "22:00"
+}
+
+model Ingredient {
+  id        String          @id @default(uuid())
+  name      String
+  unit      String
+  status    Boolean         @default(true)
+  recipes   ProductRecipe[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  @@unique([name])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model ProductRecipe {
+  id           String @id @default(uuid())
+  quantity     Float
+  unit         String
+  productId    String
+  ingredientId String
+
+  product    Product    @relation(fields: [productId], references: [id])
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+}
+
+model Question {
+  id        String       @id @default(uuid())
+  name      String // Question text
+  required  Boolean      @default(false)
+  min       Int? // Minimum value for numeric questions
+  max       Int? // Maximum value for numeric questions
+  type      QuestionType
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  // Relations
+  questionProducts QuestionProduct[]
+  translations     Translation[]
+
+  @@index([type])
+  @@index([isActive])
+  @@index([deletedAt])
+}
+
+model QuestionProduct {
+  id         String              @id @default(uuid())
+  question   Question            @relation(fields: [questionId], references: [id])
+  questionId String
+  product    Product             @relation(fields: [productId], references: [id])
+  productId  String
+  position   Int                 @default(0)
+  itemType   QuestionProductType
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@index([questionId])
+  @@index([productId])
+}
+
+//
+// ----- Restaurant-specific inventory & overrides -----
+//
+
+model RestaurantInventory {
+  id           String     @id @default(uuid())
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  restaurantId String
+  product      Product    @relation(fields: [productId], references: [id])
+  productId    String
+
+  // stock per restaurant for the product (global stock across menus of the same restaurant)
+  stock             Int? // nullable if not tracked
+  lowStockLimit     Int? // threshold for alerts
+  // optional override of base price at restaurant level (applies when menu doesn't override)
+  basePriceOverride Decimal? @db.Decimal(8, 2)
+
+  // per-size stock/overrides can be represented with a related table if necessary:
+  sizeInventories SizeInventory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+  updatedBy String?
+
+  @@unique([restaurantId, productId])
+  @@index([productId])
+  @@index([restaurantId])
+}
+
+model SizeInventory {
+  id                    String              @id @default(uuid())
+  restaurantInventory   RestaurantInventory @relation(fields: [restaurantInventoryId], references: [id])
+  restaurantInventoryId String
+  productSizeId         String? // links to ProductSize.id
+  stock                 Int?
+  priceOverride         Decimal?            @db.Decimal(8, 2) // price for this size at restaurant level (fallback for menu-level)
+  label                 String?
+}
+
+//
+// ----- Menus (per restaurant) -----
+//
+
+model Menu {
+  id           String     @id @default(uuid())
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  restaurantId String
+  name         String
+  type         MenuType
+  description  String?
+  active       Boolean    @default(true)
+  startsAt     DateTime? // for time-limited menus
+  endsAt       DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  createdBy    String?
+  updatedBy    String?
+
+  categories MenuCategory[]
+
+  @@unique([restaurantId, name, type])
+  @@index([restaurantId, type])
+}
+
+model MenuCategory {
+  id         String   @id @default(uuid())
+  menu       Menu     @relation(fields: [menuId], references: [id])
+  menuId     String
+  category   Category @relation(fields: [categoryId], references: [id])
+  categoryId String
+  position   Int      @default(0)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  createdBy  String?
+  updatedBy  String?
+
+  menuItems MenuItem[]
+
+  @@index([menuId])
+  @@index([categoryId])
+}
+
+model MenuItem {
+  id         String       @id @default(uuid())
+  category   MenuCategory @relation(fields: [categoryId], references: [id])
+  categoryId String
+  product    Product      @relation(fields: [productId], references: [id])
+  productId  String
+
+  // price override at menu level (if null -> check RestaurantInventory.basePriceOverride -> product.basePrice)
+  price    Decimal? @db.Decimal(8, 2)
+  visible  Boolean  @default(true)
+  position Int      @default(0)
+
+  // stock at menu-item level (e.g. limited menu item)
+  stock   Int?
+  soldOut Boolean @default(false)
+
+  // time / date availability specific to this menu item
+  availableFrom DateTime?
+  availableTo   DateTime?
+
+  // recurring schedule (ex: only available Mon-Fri 10:00-14:00)
+  schedules MenuItemSchedule[]
+
+  // size-specific prices for this menu item (per restaurant/menu/size)
+  sizePrices MenuSizePrice[]
+
+  // optional snapshot of product data at the time of publishing (name/desc/images)
+  productSnapshot Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+  updatedBy String?
+
+  @@unique([categoryId, productId])
+  @@index([categoryId])
+  @@index([productId])
+}
+
+model MenuItemSchedule {
+  id         String   @id @default(uuid())
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  menuItemId String
+  dayOfWeek  Int // 0..6
+  startTime  String // "08:00"
+  endTime    String // "11:30"
+  // optionally can add timezone override, but generally menu's restaurant timezone is used
+}
+
+model MenuSizePrice {
+  id            String   @id @default(uuid())
+  menuItem      MenuItem @relation(fields: [menuItemId], references: [id])
+  menuItemId    String
+  // optional link to canonical ProductSize
+  productSizeId String?
+  label         String? // "Regular", "Large"
+  price         Decimal  @db.Decimal(8, 2)
+  stock         Int? // optional stock at size level
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([menuItemId])
+  @@index([productSizeId])
 }
