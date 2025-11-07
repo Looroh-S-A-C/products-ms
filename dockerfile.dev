@@ -1,0 +1,32 @@
+# Etapa 1: dependencias
+FROM node:24-alpine3.22 AS deps
+WORKDIR /usr/src/app
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile
+
+# Etapa 2: build
+FROM node:24-alpine3.22 AS build
+WORKDIR /usr/src/app
+COPY --from=deps /usr/src/app/node_modules ./node_modules
+COPY . .
+RUN npx prisma generate
+RUN yarn build
+
+# Etapa 3: producción
+FROM node:24-alpine3.22 AS prod
+WORKDIR /usr/src/app
+
+COPY package.json yarn.lock ./
+RUN yarn install --production --frozen-lockfile --ignore-scripts && yarn cache clean
+
+COPY --from=build /usr/src/app/dist ./dist
+COPY --from=build /usr/src/app/prisma ./prisma
+COPY --from=build /usr/src/app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=build /usr/src/app/node_modules/.prisma ./node_modules/.prisma
+
+ENV NODE_ENV=production
+USER node
+EXPOSE 3000
+
+
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
