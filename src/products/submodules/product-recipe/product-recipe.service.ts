@@ -1,11 +1,18 @@
-import { Injectable, Logger, OnModuleInit, HttpStatus } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  HttpStatus,
+  Inject,
+} from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import {
   CreateProductRecipeDto,
   ReplaceByProductIdDto,
   UpdateProductRecipeDto,
 } from './dtos';
-import { RpcException } from '@nestjs/microservices';
+import { ClientProxy, RpcException } from '@nestjs/microservices';
+import { EVENTS, NATS_SERVICE } from 'src/common/constants';
 
 /**
  * Service responsible for managing product recipes
@@ -14,6 +21,10 @@ import { RpcException } from '@nestjs/microservices';
 @Injectable()
 export class ProductRecipeService extends PrismaClient implements OnModuleInit {
   private readonly logger = new Logger(ProductRecipeService.name);
+
+  constructor(@Inject(NATS_SERVICE) private readonly client: ClientProxy) {
+    super();
+  }
 
   /**
    * Initialize database connection when module starts
@@ -50,6 +61,11 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
           },
         },
       });
+
+      this.client.emit(EVENTS.PRODUCT_RECIPE_CREATED, {
+        productId: created.productId,
+      });
+
       return {
         message: `Ingredient [${created.ingredient?.name}] was added to product successfully`,
         ...created,
@@ -79,7 +95,7 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
       const productRecipes = await this.productRecipe.findMany({
         where: { productId },
         omit: {
-          ingredientId: true, 
+          ingredientId: true,
         },
         include: {
           ingredient: {
@@ -117,7 +133,7 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
         where: { id },
         omit: {
           productId: true,
-          ingredientId: true
+          ingredientId: true,
         },
         include: {
           ingredient: true,
@@ -270,6 +286,9 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
       const { count } = await this.productRecipe.createMany({
         data: recipeData,
       });
+
+      if (count) this.client.emit(EVENTS.PRODUCT_RECIPE_CREATED, { productId });
+
       return {
         message: `${count} product-recipe relationships for product ${productId} have been created successfully.`,
         productId,

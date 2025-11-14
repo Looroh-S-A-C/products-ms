@@ -4,7 +4,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { DeleteProductDto } from './dto/delete-product.dto';
 import { PaginationDto } from 'src/common';
-import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
+import { Ctx, MessagePattern, NatsContext, Payload, RpcException, Transport } from '@nestjs/microservices';
 
 /**
  * Controller for managing products.
@@ -29,7 +29,7 @@ export class ProductsController {
   async create(@Payload() createProductDto: CreateProductDto) {
     this.logger.debug('Creating a new product');
     try {
-      console.log({createProductDto});
+      console.log({ createProductDto });
       return await this.productsService.create(createProductDto);
     } catch (err) {
       this.logger.error('Error creating product', err.stack);
@@ -83,7 +83,10 @@ export class ProductsController {
   async update(@Payload() updateProductDto: UpdateProductDto) {
     this.logger.debug(`Updating product with id: ${updateProductDto.id}`);
     try {
-      return await this.productsService.update(updateProductDto.id, updateProductDto);
+      return await this.productsService.update(
+        updateProductDto.id,
+        updateProductDto,
+      );
     } catch (err) {
       this.logger.error(
         `Error updating product with id: ${updateProductDto.id}`,
@@ -119,11 +122,14 @@ export class ProductsController {
    * @param ids Array of product IDs to validate
    * @returns Validation result
    */
-  @MessagePattern('product.validate_products')
+  @MessagePattern('product.validate_products', Transport.NATS, { queue: 'worker' })
   async validateProduct(@Payload() ids: string[]) {
+
     this.logger.debug(`Validating products with ids: ${ids.join(', ')}`);
     try {
-      return await this.productsService.validateProducts(ids);
+      const products = await this.productsService.validateProducts(ids);
+      this.logger.log('Products were validated successfully');      
+      return products;
     } catch (err) {
       this.logger.error(
         `Error validating products [${ids.join(', ')}]`,

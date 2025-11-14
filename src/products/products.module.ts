@@ -7,6 +7,7 @@ import { ProductScheduleModule } from './submodules/product-schedule/product-sch
 import { ProductImageModule } from './submodules/product-image/product-image.module';
 import { ProductTagModule } from './submodules/product-tag/product-tag.module';
 import { ProductQuestionModule } from './submodules/product-question/product-question.module';
+import { NatsModule } from 'src/transport/nats.module';
 
 @Module({
   imports: [
@@ -15,7 +16,8 @@ import { ProductQuestionModule } from './submodules/product-question/product-que
     ProductScheduleModule,
     ProductImageModule,
     ProductTagModule,
-    ProductQuestionModule,
+    ProductQuestionModule, 
+    NatsModule
   ],
   controllers: [ProductsController],
   providers: [ProductsService],

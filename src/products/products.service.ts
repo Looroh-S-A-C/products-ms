@@ -1,4 +1,10 @@
-import { HttpStatus, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import {
   CreateProductDto,
   DeleteProductDto,
@@ -7,20 +13,32 @@ import {
 } from './dto';
 import { PrismaClient, QuestionProductType } from '@prisma/client';
 import { PaginationDto } from '../common/dto/pagination.dto';
-import { RpcException } from '@nestjs/microservices';
+import { ClientProxy, RpcException } from '@nestjs/microservices';
+import { EVENTS, NATS_SERVICE } from 'src/common/constants';
+import { firstValueFrom } from 'rxjs';
 
 @Injectable()
 export class ProductsService extends PrismaClient implements OnModuleInit {
   private readonly logger = new Logger(ProductsService.name);
+
+  constructor(@Inject(NATS_SERVICE) private readonly client: ClientProxy) {
+    super();
+  }
   onModuleInit() {
     this.$connect();
     this.logger.log('Database connected');
   }
 
-  create(createProductDto: CreateProductDto) {
-    return this.product.create({
+  async create(createProductDto: CreateProductDto) {
+    const newProduct = await this.product.create({
       data: createProductDto,
     });
+
+    this.logger.log('Emitting event to data-indexer-ms');
+
+    this.client.emit(EVENTS.PRODUCT_CREATED, { productId: newProduct.id });
+
+    return newProduct;
   }
 
   async findAll(paginationDto: PaginationDto) {
@@ -55,7 +73,67 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
   async findOne(id: string) {
     const product = await this.product.findUnique({
       where: { id, deletedAt: null },
-    });
+      include: {
+        recipe: {
+          select: {
+            id: true,
+            quantity: true,
+            unit: true,
+            ingredient: {
+              select: {
+                name: true,
+              },
+            },
+          },
+          where: {
+            ingredient: {
+              status: true,
+              deletedAt: null,
+            },
+          },
+        },
+        tags: {
+          select: {
+            tag: true,
+          },
+          where: {
+            tag: {
+              deletedAt: null,
+            },
+          },
+        },
+        sizes: {
+          select: {
+            id: true,
+            name: true,
+            price: true,
+            status: true,
+          },
+          where: {
+            status: true,
+          },
+        },
+        schedules: {
+          omit: {
+            productId: true,
+          },
+        },
+        translations: {
+          select: {
+            description: true,
+            languageCode: true,
+            name: true,
+          },
+        },
+        images: {
+          select: {
+            isPrimary: true,
+            url: true,
+            id: true,
+          },
+        },
+      },
+    }); 
 
     if (!product) {
       throw new RpcException({
@@ -63,8 +141,14 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
         message: `Product with id ${id} not found`,
       });
     }
+
+    const { tags, ...rest } = product;
+
     console.log({ product });
-    return await this.expandQuestionsRecursively(product);
+    return await this.expandQuestionsRecursively({
+      ...rest,
+      tags: tags.map((tag) => ({ ...tag.tag })),
+    });
   }
 
   /**
@@ -114,10 +198,12 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
   async update(id: string, updateProductDto: UpdateProductDto) {
     const { id: __, ...toUpdate } = updateProductDto;
     await this.findOne(id);
-    return this.product.update({
+    const product = await this.product.update({
       where: { id },
       data: toUpdate,
     });
+    this.client.emit(EVENTS.PRODUCT_UPDATED, { productId: product.id });
+    return product;
   }
 
   async remove(deleteProductDto: DeleteProductDto) {
@@ -139,11 +225,62 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
     const products = await this.product.findMany({
       where: { id: { in: ids } },
       include: {
+        recipe: {
+          select: {
+            id: true,
+            quantity: true,
+            unit: true,
+            ingredient: {
+              select: {
+                name: true,
+              },
+            },
+          },
+          where: {
+            ingredient: {
+              status: true,
+              deletedAt: null,
+            },
+          },
+        },
+        tags: {
+          select: {
+            tag: true,
+          },
+          where: {
+            tag: {
+              deletedAt: null,
+            },
+          },
+        },
         sizes: {
           select: {
             id: true,
             name: true,
             price: true,
+            status: true,
+          },
+          where: {
+            status: true,
+          },
+        },
+        schedules: {
+          omit: {
+            productId: true,
+          },
+        },
+        translations: {
+          select: {
+            description: true,
+            languageCode: true,
+            name: true,
+          },
+        },
+        images: {
+          select: {
+            isPrimary: true,
+            url: true,
+            id: true,
           },
         },
       },
@@ -159,6 +296,12 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
       });
     }
 
-    return products;
+    return products.map((product) => {
+      const { tags, ...rest } = product;
+      return {
+        ...rest,
+        tags: tags.map((tag) => ({ ...tag.tag })),
+      };
+    });
   }
 }

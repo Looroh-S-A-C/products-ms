@@ -1,4 +1,10 @@
-import { HttpStatus, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { PrismaClient, Tag } from '@prisma/client';
 import {
   CreateProductTagDto,
@@ -6,7 +12,8 @@ import {
   RemoveDto,
   ReplaceByProductIdDto,
 } from './dtos';
-import { RpcException } from '@nestjs/microservices';
+import { ClientProxy, RpcException } from '@nestjs/microservices';
+import { EVENTS, NATS_SERVICE } from 'src/common/constants';
 
 /**
  * Service responsible for managing product-tag relationships
@@ -16,6 +23,9 @@ import { RpcException } from '@nestjs/microservices';
 export class ProductTagService extends PrismaClient implements OnModuleInit {
   private readonly logger = new Logger(ProductTagService.name);
 
+  constructor(@Inject(NATS_SERVICE) private readonly client: ClientProxy) {
+    super();
+  }
   /**
    * Initialize database connection when module starts
    */
@@ -47,6 +57,9 @@ export class ProductTagService extends PrismaClient implements OnModuleInit {
           },
         },
       },
+    });
+    this.client.emit(EVENTS.PRODUCT_TAG_CREATED, {
+      productId: createProductTagDto.productId,
     });
     return {
       message: `Tag: [${created.tag.name}] was added successful`,
@@ -189,8 +202,12 @@ export class ProductTagService extends PrismaClient implements OnModuleInit {
       data: relationshipData,
     });
 
+    if (count) this.client.emit(EVENTS.PRODUCT_TAG_CREATED, { productId });
+
     return {
       message: `${count} tag relationships for product ${productId} have been created successfully.`,
+      productId,
+      createdCount: count,
     };
   }
 

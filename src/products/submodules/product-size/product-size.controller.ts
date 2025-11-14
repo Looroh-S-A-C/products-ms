@@ -13,6 +13,8 @@ import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
  */
 @Controller()
 export class ProductSizeController {
+
+  
   private readonly logger = new Logger(ProductSizeController.name);
 
   /**

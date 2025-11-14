@@ -1,11 +1,18 @@
-import { Injectable, Logger, OnModuleInit, HttpStatus } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  HttpStatus,
+  Inject,
+} from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import {
   CreateProductSizeDto,
   ReplaceByProductIdDto,
   UpdateProductSizeDto,
 } from './dtos';
-import { RpcException } from '@nestjs/microservices';
+import { ClientProxy, RpcException } from '@nestjs/microservices';
+import { EVENTS, NATS_SERVICE } from 'src/common/constants';
 
 /**
  * Service responsible for managing product sizes
@@ -14,6 +21,10 @@ import { RpcException } from '@nestjs/microservices';
  */
 @Injectable()
 export class ProductSizeService extends PrismaClient implements OnModuleInit {
+  constructor(@Inject(NATS_SERVICE) private readonly client: ClientProxy) {
+    super();
+  }
+
   private readonly logger = new Logger(ProductSizeService.name);
 
   /**
@@ -43,6 +54,11 @@ export class ProductSizeService extends PrismaClient implements OnModuleInit {
           status: true,
         },
       });
+
+      this.client.emit(EVENTS.PRODUCT_SIZE_CREATED, {
+        productId: createProductSizeDto.productId,
+      });
+
       return {
         message: `Product size: [${created.name}] was created successfully`,
         size: created,
@@ -243,8 +259,13 @@ export class ProductSizeService extends PrismaClient implements OnModuleInit {
       const { count } = await this.productSize.createMany({
         data: sizeData,
       });
+
+      if (count) this.client.emit(EVENTS.PRODUCT_SIZE_CREATED, { productId });
+
       return {
         message: `${count} product sizes for product ${productId} have been created successfully.`,
+        productId,
+        createdCount: count,
       };
     } catch (error) {
       this.logger.error(
