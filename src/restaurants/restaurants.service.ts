@@ -4,8 +4,10 @@ import {
   CreateRestaurantDto,
   UpdateRestaurantDto,
   DeleteRestaurantDto,
-} from './dtos';
-import { PaginationDto } from '../common';
+  PaginationDto,
+  Restaurant,
+  PaginationResponse,
+} from 'qeai-sdk';
 import { RpcException } from '@nestjs/microservices';
 import { HttpStatus } from '@nestjs/common';
 
@@ -21,7 +23,7 @@ export class RestaurantsService extends PrismaClient implements OnModuleInit {
   /**
    * Create a new restaurant
    */
-  async create(createRestaurantDto: CreateRestaurantDto) {
+  async create(createRestaurantDto: CreateRestaurantDto): Promise<Restaurant> {
     return await this.restaurant.create({
       data: createRestaurantDto,
     });
@@ -30,7 +32,9 @@ export class RestaurantsService extends PrismaClient implements OnModuleInit {
   /**
    * Find all restaurants with pagination
    */
-  async findAll(paginationDto: PaginationDto) {
+  async findAll(
+    paginationDto: PaginationDto,
+  ): Promise<PaginationResponse<Restaurant>> {
     const { limit, page } = paginationDto;
     const where = {
       status: true,
@@ -38,12 +42,14 @@ export class RestaurantsService extends PrismaClient implements OnModuleInit {
     };
     const total = await this.restaurant.count({ where });
     const lastPage = Math.ceil(total / limit);
+    const restaurants = await this.restaurant.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    
     return {
-      list: await this.restaurant.findMany({
-        where,
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
+      list: restaurants,
       meta: {
         total,
         page,
@@ -55,7 +61,7 @@ export class RestaurantsService extends PrismaClient implements OnModuleInit {
   /**
    * Find one restaurant by ID
    */
-  async findOne(id: string) {
+  async findOne(id: string): Promise<Restaurant> {
     const restaurant = await this.restaurant.findUnique({
       where: { id, deletedAt: null },
     });
@@ -71,11 +77,11 @@ export class RestaurantsService extends PrismaClient implements OnModuleInit {
   /**
    * Update a restaurant
    */
-  async update(updateRestaurantDto: UpdateRestaurantDto) {
-    const { id, ...data } = updateRestaurantDto;
-    await this.findOne(id);
+  async update(updateRestaurantDto: UpdateRestaurantDto): Promise<Restaurant> {
+    const { restaurantId, ...data } = updateRestaurantDto;
+    await this.findOne(restaurantId!);
     return this.restaurant.update({
-      where: { id },
+      where: { id: restaurantId },
       data,
     });
   }
@@ -83,11 +89,11 @@ export class RestaurantsService extends PrismaClient implements OnModuleInit {
   /**
    * Soft delete a restaurant
    */
-  async delete(deleteRestaurantDto: DeleteRestaurantDto) {
-    const { id, deletedBy } = deleteRestaurantDto;
-    await this.findOne(id);
+  async delete(deleteRestaurantDto: DeleteRestaurantDto): Promise<Restaurant> {
+    const { restaurantId, deletedBy } = deleteRestaurantDto;
+    await this.findOne(restaurantId);
     return this.restaurant.update({
-      where: { id },
+      where: { id: restaurantId },
       data: {
         status: false,
         deletedBy,

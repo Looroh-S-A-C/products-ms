@@ -1,15 +1,15 @@
-import {
-  HttpStatus,
-  Injectable,
-  Logger,
-  NotFoundException,
-  OnModuleInit,
-} from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { CreateTagDto, DeleteTagDto, UpdateTagDto } from './dtos';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import {
+  CreateTagDto,
+  DeleteTagDto,
+  UpdateTagDto,
+  PaginationDto,
+  SearchByNameDto,
+  Tag,
+  PaginationResponse,
+} from 'qeai-sdk';
 import { RpcException } from '@nestjs/microservices';
-import { SearchByNameDto } from './dtos/search-by-name.dto';
 
 /**
  * Service responsible for managing tags in the system
@@ -32,7 +32,7 @@ export class TagsService extends PrismaClient implements OnModuleInit {
    * @param createTagDto - Data for creating the tag
    * @returns Created tag
    */
-  async create(createTagDto: CreateTagDto) {
+  async create(createTagDto: CreateTagDto): Promise<Tag> {
     this.logger.log(`Creating tag: ${createTagDto.name}`);
     return this.tag.create({
       data: createTagDto,
@@ -44,7 +44,9 @@ export class TagsService extends PrismaClient implements OnModuleInit {
    * @param paginationDto - Pagination parameters
    * @returns Paginated list of tags
    */
-  async findAll(paginationDto: PaginationDto) {
+  async findAll(
+    paginationDto: PaginationDto,
+  ): Promise<PaginationResponse<Tag>> {
     const { limit, page } = paginationDto;
     const where = {
       deletedAt: null,
@@ -52,21 +54,21 @@ export class TagsService extends PrismaClient implements OnModuleInit {
 
     const total = await this.tag.count({ where });
     const lastPage = Math.ceil(total / limit);
-
-    return {
-      list: await this.tag.findMany({
-        where,
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy: { name: 'asc' },
-        include: {
-          products: {
-            include: {
-              product: true,
-            },
+    const tags = await this.tag.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: limit,
+      orderBy: { name: 'asc' },
+      include: {
+        products: {
+          include: {
+            product: true,
           },
         },
-      }),
+      },
+    });
+    return {
+      list: tags,
       meta: {
         total,
         page,
@@ -81,7 +83,7 @@ export class TagsService extends PrismaClient implements OnModuleInit {
    * @returns Tag details
    * @throws NotFoundException if tag not found
    */
-  async findOne(id: string) {
+  async findOne(id: string): Promise<Tag> {
     const tag = await this.tag.findUnique({
       where: {
         id,
@@ -112,29 +114,29 @@ export class TagsService extends PrismaClient implements OnModuleInit {
    * @param updateTagDto - Update data
    * @returns Updated tag
    */
-  async update(updateTagDto: UpdateTagDto) {
-    const { id, ...toUpdate } = updateTagDto;
-    await this.findOne(id);
+  async update(updateTagDto: UpdateTagDto): Promise<Tag> {
+    const { tagId, ...toUpdate } = updateTagDto;
+    await this.findOne(tagId!);
 
-    this.logger.log(`Updating tag: ${id}`);
+    this.logger.log(`Updating tag: ${tagId}`);
     return this.tag.update({
-      where: { id },
+      where: { id: tagId },
       data: toUpdate,
     });
   }
 
   /**
-   * Soft delete tag by ID
+   * Soft delete tag by tagId
    * @param deleteTagDto - Delete data including deletedBy
    * @returns Updated tag
    */
-  async remove(deleteTagDto: DeleteTagDto) {
-    const { id, deletedBy } = deleteTagDto;
-    await this.findOne(id);
+  async remove(deleteTagDto: DeleteTagDto): Promise<Tag> {
+    const { tagId, deletedBy } = deleteTagDto;
+    await this.findOne(tagId);
 
-    this.logger.log(`Soft deleting tag: ${id}`);
+    this.logger.log(`Soft deleting tag: ${tagId}`);
     return this.tag.update({
-      where: { id },
+      where: { id: tagId },
       data: {
         deletedAt: new Date(),
         deletedBy,
@@ -148,7 +150,7 @@ export class TagsService extends PrismaClient implements OnModuleInit {
    * @returns Array of valid tags
    * @throws NotFoundException if any tag not found
    */
-  async validateTags(ids: string[]) {
+  async validateTags(ids: string[]): Promise<Tag[]> {
     const uniqueIds = Array.from(new Set(ids));
     const tags = await this.tag.findMany({
       where: {
@@ -172,7 +174,9 @@ export class TagsService extends PrismaClient implements OnModuleInit {
    * @param name - Name to search for
    * @returns Array of matching tags
    */
-  async searchByName(searchByName: SearchByNameDto) {
+  async searchByName(
+    searchByName: SearchByNameDto,
+  ): Promise<PaginationResponse<Tag>> {
     const { limit, page, name } = searchByName;
     const where = {
       deletedAt: null,
@@ -182,14 +186,14 @@ export class TagsService extends PrismaClient implements OnModuleInit {
       where: { name: { contains: name, mode: 'insensitive' }, ...where },
     });
     const lastPage = Math.ceil(total / limit);
-    const tagsList = await this.tag.findMany({
+    const tags = await this.tag.findMany({
       where: { name: { contains: name, mode: 'insensitive' }, ...where },
       skip: (page - 1) * limit,
       take: limit,
       orderBy: { name: 'asc' },
     });
     return {
-      list: tagsList,
+      list: tags,
       meta: {
         total,
         page,
@@ -203,8 +207,8 @@ export class TagsService extends PrismaClient implements OnModuleInit {
    * @param productId - Product ID
    * @returns Array of tags associated with the product
    */
-  async findByProductId(productId: string) {
-    return this.tag.findMany({
+  async findByProductId(productId: string): Promise<Tag[]> {
+    const tags = await this.tag.findMany({
       where: {
         products: {
           some: {
@@ -215,15 +219,15 @@ export class TagsService extends PrismaClient implements OnModuleInit {
       },
       orderBy: { name: 'asc' },
     });
+    return tags;
   }
-
   /**
    * Get most used tags
    * @param limit - Number of tags to return
    * @returns Array of most used tags
    */
-  async getMostUsed(limit: number = 10) {
-    return this.tag.findMany({
+  async getMostUsed(limit: number = 10): Promise<Tag[]> {
+    const tags = await this.tag.findMany({
       where: {
         deletedAt: null,
       },
@@ -238,8 +242,9 @@ export class TagsService extends PrismaClient implements OnModuleInit {
           select: {
             products: true,
           },
-        } ,
+        },
       },
     });
+    return tags;
   }
 }

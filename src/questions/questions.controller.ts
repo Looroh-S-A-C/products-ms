@@ -1,14 +1,15 @@
 import { Controller, Logger } from '@nestjs/common';
 import { QuestionsService } from './questions.service';
+import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
 import {
+  QUESTION_COMMANDS,
   CreateQuestionDto,
   UpdateQuestionDto,
   DeleteQuestionDto,
   SearchByNameDto,
-} from './dtos';
-import { PaginationDto } from '../common/dto/pagination.dto';
+  PaginationDto,
+} from 'qeai-sdk';
 import { QuestionType } from '@prisma/client';
-import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
 
 /**
  * Controller for managing questions.
@@ -29,7 +30,7 @@ export class QuestionsController {
    * @param createQuestionDto Question creation data
    * @returns Created question
    */
-  @MessagePattern('questions.create')
+  @MessagePattern(QUESTION_COMMANDS.CREATE)
   async create(@Payload() createQuestionDto: CreateQuestionDto) {
     this.logger.debug('Creating a new question');
     try {
@@ -46,7 +47,7 @@ export class QuestionsController {
    * @param paginationDto Pagination parameters
    * @returns Paginated list of questions
    */
-  @MessagePattern('questions.findAll')
+  @MessagePattern(QUESTION_COMMANDS.FIND_ALL)
   async findAll(@Payload() paginationDto: PaginationDto) {
     this.logger.debug(
       `Fetching all questions. Page: ${paginationDto.page}, Limit: ${paginationDto.limit}`,
@@ -65,14 +66,17 @@ export class QuestionsController {
    * @param name Name to search for
    * @returns Array of matching questions
    */
-  @MessagePattern('questions.searchByName')
-  async searchByName(@Payload() searchByNameDto : SearchByNameDto) {
+  @MessagePattern(QUESTION_COMMANDS.SEARCH_BY_NAME)
+  async searchByName(@Payload() searchByNameDto: SearchByNameDto) {
     const { name } = searchByNameDto;
     this.logger.debug(`Searching questions by name: ${name}`);
     try {
       return await this.questionsService.searchByName(searchByNameDto);
     } catch (err) {
-      this.logger.error(`Error searching questions by name: ${name}`, err.stack);
+      this.logger.error(
+        `Error searching questions by name: ${name}`,
+        err.stack,
+      );
       if (err instanceof RpcException) throw err;
       throw new RpcException({ status: 500, message: err.message });
     }
@@ -83,7 +87,7 @@ export class QuestionsController {
    * @param type Question type
    * @returns Array of questions of the specified type
    */
-  @MessagePattern('questions.findByType')
+  @MessagePattern(QUESTION_COMMANDS.FIND_BY_TYPE)
   async findByType(@Payload('type') type: QuestionType) {
     this.logger.debug(`Fetching questions by type: ${type}`);
     try {
@@ -100,7 +104,7 @@ export class QuestionsController {
    * @param productId Product ID to search questions for
    * @returns Array of questions associated with the product
    */
-  @MessagePattern('questions.findByProductId')
+  @MessagePattern(QUESTION_COMMANDS.FIND_BY_PRODUCT_ID)
   async findByProductId(@Payload('productId') productId: string) {
     this.logger.debug(`Fetching questions for product ID: ${productId}`);
     try {
@@ -120,7 +124,7 @@ export class QuestionsController {
    * @param id Question ID
    * @returns Question details
    */
-  @MessagePattern('questions.findOne')
+  @MessagePattern(QUESTION_COMMANDS.FIND_ONE)
   async findOne(@Payload('id') id: string) {
     this.logger.debug(`Fetching question with id: ${id}`);
     try {
@@ -137,14 +141,16 @@ export class QuestionsController {
    * @param updateQuestionDto Data for updating the question
    * @returns Updated question
    */
-  @MessagePattern('questions.update')
+  @MessagePattern(QUESTION_COMMANDS.UPDATE)
   async update(@Payload() updateQuestionDto: UpdateQuestionDto) {
-    this.logger.debug(`Updating question with id: ${updateQuestionDto.id}`);
+    this.logger.debug(
+      `Updating question with id: ${updateQuestionDto.questionId}`,
+    );
     try {
       return await this.questionsService.update(updateQuestionDto);
     } catch (err) {
       this.logger.error(
-        `Error updating question with id: ${updateQuestionDto.id}`,
+        `Error updating question with id: ${updateQuestionDto.questionId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;
@@ -157,14 +163,16 @@ export class QuestionsController {
    * @param deleteQuestionDto Data for deleting the question
    * @returns Deleted (soft deleted) question
    */
-  @MessagePattern('questions.remove')
+  @MessagePattern(QUESTION_COMMANDS.REMOVE)
   async remove(@Payload() deleteQuestionDto: DeleteQuestionDto) {
-    this.logger.debug(`Deleting question with id: ${deleteQuestionDto.id}`);
+    this.logger.debug(
+      `Deleting question with id: ${deleteQuestionDto.questionId}`,
+    );
     try {
       return await this.questionsService.remove(deleteQuestionDto);
     } catch (err) {
       this.logger.error(
-        `Error deleting question with id: ${deleteQuestionDto.id}`,
+        `Error deleting question with id: ${deleteQuestionDto.questionId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;

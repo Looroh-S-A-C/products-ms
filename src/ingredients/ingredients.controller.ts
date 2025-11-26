@@ -1,15 +1,14 @@
-import { Controller } from '@nestjs/common';
+import { Controller, Logger } from '@nestjs/common';
 import { IngredientsService } from './ingredients.service';
+import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
 import {
+  INGREDIENT_COMMANDS,
   CreateIngredientDto,
   DeleteIngredientDto,
   UpdateIngredientDto,
-} from './dtos';
-import { PaginationDto } from '../common/dto/pagination.dto';
-import { MessagePattern, Payload } from '@nestjs/microservices';
-import { Logger } from '@nestjs/common';
-import { RpcException } from '@nestjs/microservices';
-import { SearchByNameDto } from './dtos/search-by-name.dto';
+  SearchByNameDto,
+  PaginationDto,
+} from 'qeai-sdk';
 
 /**
  * Controller for managing ingredients.
@@ -32,7 +31,7 @@ export class IngredientsController {
    * @param createIngredientDto Data transfer object for ingredient creation.
    * @returns The created ingredient entity.
    */
-  @MessagePattern('ingredients.create')
+  @MessagePattern(INGREDIENT_COMMANDS.CREATE)
   async create(@Payload() createIngredientDto: CreateIngredientDto) {
     this.logger.debug('Creating a new ingredient');
     try {
@@ -49,7 +48,7 @@ export class IngredientsController {
    * @param paginationDto Pagination parameters.
    * @returns An object containing ingredients data and metadata.
    */
-  @MessagePattern('ingredients.findAll')
+  @MessagePattern(INGREDIENT_COMMANDS.FIND_ALL)
   async findAll(@Payload() paginationDto: PaginationDto) {
     this.logger.debug(
       `Fetching all ingredients. Page: ${paginationDto.page}, Limit: ${paginationDto.limit}`,
@@ -68,9 +67,11 @@ export class IngredientsController {
    * @param name Name of the ingredient to search for.
    * @returns Array of matching ingredients.
    */
-  @MessagePattern('ingredients.searchByName')
+  @MessagePattern(INGREDIENT_COMMANDS.SEARCH_BY_NAME)
   async searchByName(@Payload() searchByNameDto: SearchByNameDto) {
-    this.logger.debug(`Searching ingredients with name: ${searchByNameDto.name}`);
+    this.logger.debug(
+      `Searching ingredients with name: ${searchByNameDto.name}`,
+    );
     try {
       return await this.ingredientsService.searchByName(searchByNameDto);
     } catch (err) {
@@ -88,7 +89,7 @@ export class IngredientsController {
    * @param id Ingredient identifier.
    * @returns The ingredient entity if found.
    */
-  @MessagePattern('ingredients.findOne')
+  @MessagePattern(INGREDIENT_COMMANDS.FIND_ONE)
   async findOne(@Payload() id: string) {
     this.logger.debug(`Fetching ingredient with id: ${id}`);
     try {
@@ -105,14 +106,16 @@ export class IngredientsController {
    * @param updateIngredientDto Data transfer object containing update details.
    * @returns The updated ingredient entity.
    */
-  @MessagePattern('ingredients.update')
+  @MessagePattern(INGREDIENT_COMMANDS.UPDATE)
   async update(@Payload() updateIngredientDto: UpdateIngredientDto) {
-    this.logger.debug(`Updating ingredient with id: ${updateIngredientDto.id}`);
+    this.logger.debug(
+      `Updating ingredient with id: ${updateIngredientDto.ingredientId}`,
+    );
     try {
       return await this.ingredientsService.update(updateIngredientDto);
     } catch (err) {
       this.logger.error(
-        `Error updating ingredient with id: ${updateIngredientDto.id}`,
+        `Error updating ingredient with id: ${updateIngredientDto.ingredientId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;
@@ -125,14 +128,16 @@ export class IngredientsController {
    * @param deleteIngredientDto Data transfer object for deletion details.
    * @returns The updated (soft deleted) ingredient entity.
    */
-  @MessagePattern('ingredients.delete')
+  @MessagePattern(INGREDIENT_COMMANDS.DELETE)
   async delete(@Payload() deleteIngredientDto: DeleteIngredientDto) {
-    this.logger.debug(`Deleting ingredient with id: ${deleteIngredientDto.id}`);
+    this.logger.debug(
+      `Deleting ingredient with id: ${deleteIngredientDto.ingredientId}`,
+    );
     try {
       return await this.ingredientsService.remove(deleteIngredientDto);
     } catch (err) {
       this.logger.error(
-        `Error deleting ingredient with id: ${deleteIngredientDto.id}`,
+        `Error deleting ingredient with id: ${deleteIngredientDto.ingredientId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;

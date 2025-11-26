@@ -6,8 +6,9 @@ import {
   CreateTranslationDto,
   UpdateTranslationDto,
   DeleteTranslationDto,
-} from './dtos';
-import { TranslationEntityType } from './enums/translation-entity-type.enum';
+  TranslationEntityType,
+  Translation,
+} from 'qeai-sdk';
 
 @Injectable()
 export class TranslationsService extends PrismaClient {
@@ -16,7 +17,9 @@ export class TranslationsService extends PrismaClient {
   /**
    * Create a new translation
    */
-  async create(createTranslationDto: CreateTranslationDto) {
+  async create(
+    createTranslationDto: CreateTranslationDto,
+  ): Promise<Translation> {
     return await this.translation.create({
       data: createTranslationDto,
     });
@@ -25,7 +28,10 @@ export class TranslationsService extends PrismaClient {
   /**
    * Find all translations for a specific entity
    */
-  async findAllByEntity(entityType: TranslationEntityType, entityId: string) {
+  async findAllByEntity(
+    entityType: TranslationEntityType,
+    entityId: string,
+  ): Promise<Translation[]> {
     const where: any = { [entityType]: entityId };
     return await this.translation.findMany({
       where,
@@ -35,7 +41,7 @@ export class TranslationsService extends PrismaClient {
   /**
    * Find one translation by ID
    */
-  async findOne(id: string) {
+  async findOne(id: string): Promise<Translation> {
     const translation = await this.translation.findUnique({
       where: { id },
     });
@@ -50,11 +56,13 @@ export class TranslationsService extends PrismaClient {
   /**
    * Update a translation
    */
-  async update(updateTranslationDto: UpdateTranslationDto) {
-    const { id, ...data } = updateTranslationDto;
-    await this.findOne(id);
+  async update(
+    updateTranslationDto: UpdateTranslationDto,
+  ): Promise<Translation> {
+    const { translationId, ...data } = updateTranslationDto;
+    await this.findOne(translationId);
     return this.translation.update({
-      where: { id },
+      where: { id: translationId },
       data,
     });
   }
@@ -62,11 +70,13 @@ export class TranslationsService extends PrismaClient {
   /**
    * Delete a translation
    */
-  async delete(deleteTranslationDto: DeleteTranslationDto) {
-    const { id } = deleteTranslationDto;
-    await this.findOne(id);
+  async delete(
+    deleteTranslationDto: DeleteTranslationDto,
+  ): Promise<Translation> {
+    const { translationId } = deleteTranslationDto;
+    await this.findOne(translationId);
     return this.translation.delete({
-      where: { id },
+      where: { id: translationId },
     });
   }
 }

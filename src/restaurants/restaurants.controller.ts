@@ -1,8 +1,13 @@
 import { Controller, Logger } from '@nestjs/common';
 import { RestaurantsService } from './restaurants.service';
 import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
-import { CreateRestaurantDto, UpdateRestaurantDto, DeleteRestaurantDto } from './dtos';
-import { PaginationDto } from '../common';
+import {
+  RESTAURANT_COMMANDS,
+  CreateRestaurantDto,
+  UpdateRestaurantDto,
+  DeleteRestaurantDto,
+  PaginationDto,
+} from 'qeai-sdk';
 
 /**
  * Controller for managing restaurants.
@@ -25,7 +30,7 @@ export class RestaurantsController {
    * @param createRestaurantDto Data transfer object for restaurant creation.
    * @returns The created restaurant entity.
    */
-  @MessagePattern('restaurant.create')
+  @MessagePattern(RESTAURANT_COMMANDS.CREATE)
   async create(@Payload() createRestaurantDto: CreateRestaurantDto) {
     this.logger.debug('Creating a new restaurant');
     try {
@@ -42,7 +47,7 @@ export class RestaurantsController {
    * @param paginationDto Pagination parameters.
    * @returns An object containing restaurants data and metadata.
    */
-  @MessagePattern('restaurant.find-all')
+  @MessagePattern(RESTAURANT_COMMANDS.FIND_ALL)
   async findAll(@Payload() paginationDto: PaginationDto) {
     this.logger.debug(
       `Fetching all restaurants. Page: ${paginationDto.page}, Limit: ${paginationDto.limit}`,
@@ -61,7 +66,7 @@ export class RestaurantsController {
    * @param id Restaurant identifier.
    * @returns The restaurant entity if found.
    */
-  @MessagePattern('restaurant.find-one')
+  @MessagePattern(RESTAURANT_COMMANDS.FIND_ONE)
   async findOne(@Payload() id: string) {
     this.logger.debug(`Fetching restaurant with id: ${id}`);
     try {
@@ -78,14 +83,16 @@ export class RestaurantsController {
    * @param updateRestaurantDto Data transfer object containing update details.
    * @returns The updated restaurant entity.
    */
-  @MessagePattern('restaurant.update')
+  @MessagePattern(RESTAURANT_COMMANDS.UPDATE)
   async update(@Payload() updateRestaurantDto: UpdateRestaurantDto) {
-    this.logger.debug(`Updating restaurant with id: ${updateRestaurantDto.id}`);
+    this.logger.debug(
+      `Updating restaurant with id: ${updateRestaurantDto.restaurantId}`,
+    );
     try {
       return await this.restaurantsService.update(updateRestaurantDto);
     } catch (err) {
       this.logger.error(
-        `Error updating restaurant with id: ${updateRestaurantDto.id}`,
+        `Error updating restaurant with id: ${updateRestaurantDto.restaurantId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;
@@ -98,14 +105,16 @@ export class RestaurantsController {
    * @param deleteRestaurantDto Data transfer object for deletion details.
    * @returns The updated (soft deleted) restaurant entity.
    */
-  @MessagePattern('restaurant.delete')
+  @MessagePattern(RESTAURANT_COMMANDS.DELETE)
   async delete(@Payload() deleteRestaurantDto: DeleteRestaurantDto) {
-    this.logger.debug(`Deleting restaurant with id: ${deleteRestaurantDto.id}`);
+    this.logger.debug(
+      `Deleting restaurant with id: ${deleteRestaurantDto.restaurantId}`,
+    );
     try {
       return await this.restaurantsService.delete(deleteRestaurantDto);
     } catch (err) {
       this.logger.error(
-        `Error deleting restaurant with id: ${deleteRestaurantDto.id}`,
+        `Error deleting restaurant with id: ${deleteRestaurantDto.restaurantId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;

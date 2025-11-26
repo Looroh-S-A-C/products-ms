@@ -1,9 +1,13 @@
 import { Controller, Logger } from '@nestjs/common';
 import { ChainService } from './chain.service';
 import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
-import { CreateChainDto, UpdateChainDto } from './dtos';
-import { PaginationDto } from '../common';
-import { DeleteChainDto } from './dtos/delete-chain.dto';
+import {
+  CHAIN_COMMANDS,
+  CreateChainDto,
+  UpdateChainDto,
+  DeleteChainDto,
+  PaginationDto,
+} from 'qeai-sdk';
 
 /**
  * Controller for managing restaurant chains.
@@ -26,7 +30,7 @@ export class ChainController {
    * @param createChainDto Data transfer object for chain creation.
    * @returns The created chain entity.
    */
-  @MessagePattern('chain.create')
+  @MessagePattern(CHAIN_COMMANDS.CREATE)
   async create(@Payload() createChainDto: CreateChainDto) {
     this.logger.debug('Creating a new chain');
     try {
@@ -43,7 +47,7 @@ export class ChainController {
    * @param paginationDto Pagination parameters.
    * @returns An object containing chains data and metadata.
    */
-  @MessagePattern('chain.find-all')
+  @MessagePattern(CHAIN_COMMANDS.FIND_ALL)
   async findAll(@Payload() paginationDto: PaginationDto) {
     this.logger.debug(
       `Fetching all chains. Page: ${paginationDto.page}, Limit: ${paginationDto.limit}`,
@@ -62,7 +66,7 @@ export class ChainController {
    * @param id Chain identifier.
    * @returns The chain entity if found.
    */
-  @MessagePattern('chain.find-one')
+  @MessagePattern(CHAIN_COMMANDS.FIND_ONE)
   async findOne(@Payload() id: string) {
     this.logger.debug(`Fetching chain with id: ${id}`);
     try {
@@ -79,14 +83,14 @@ export class ChainController {
    * @param updateChainDto Data transfer object containing update details.
    * @returns The updated chain entity.
    */
-  @MessagePattern('chain.update')
+  @MessagePattern(CHAIN_COMMANDS.UPDATE)
   async update(@Payload() updateChainDto: UpdateChainDto) {
-    this.logger.debug(`Updating chain with id: ${updateChainDto.id}`);
+    this.logger.debug(`Updating chain with id: ${updateChainDto.chainId}`);
     try {
       return await this.chainService.update(updateChainDto);
     } catch (err) {
       this.logger.error(
-        `Error updating chain with id: ${updateChainDto.id}`,
+        `Error updating chain with id: ${updateChainDto.chainId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;
@@ -99,14 +103,14 @@ export class ChainController {
    * @param deleteChainDto Data transfer object for deletion details.
    * @returns The updated (soft deleted) chain entity.
    */
-  @MessagePattern('chain.delete')
+  @MessagePattern(CHAIN_COMMANDS.DELETE)
   async delete(@Payload() deleteChainDto: DeleteChainDto) {
-    this.logger.debug(`Deleting chain with id: ${deleteChainDto.id}`);
+    this.logger.debug(`Deleting chain with id: ${deleteChainDto.chainId}`);
     try {
       return await this.chainService.delete(deleteChainDto);
     } catch (err) {
       this.logger.error(
-        `Error deleting chain with id: ${deleteChainDto.id}`,
+        `Error deleting chain with id: ${deleteChainDto.chainId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;

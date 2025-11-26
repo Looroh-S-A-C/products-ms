@@ -1,11 +1,12 @@
 import { Controller, Logger } from '@nestjs/common';
 import { ProductRecipeService } from './product-recipe.service';
+import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
 import {
+  PRODUCT_COMMANDS,
   CreateProductRecipeDto,
   UpdateProductRecipeDto,
-  ReplaceByProductIdDto,
-} from './dtos';
-import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
+  ReplaceProductRecipesByProductIdDto,
+} from 'qeai-sdk';
 
 /**
  * Controller for managing product recipes.
@@ -26,7 +27,7 @@ export class ProductRecipeController {
    * @param createProductRecipeDto - Object containing recipe creation data.
    * @returns Created recipe entry.
    */
-  @MessagePattern('product-recipe.create')
+  @MessagePattern(PRODUCT_COMMANDS.RECIPE_CREATE)
   async create(@Payload() createProductRecipeDto: CreateProductRecipeDto) {
     this.logger.debug('Creating a new product recipe entry');
     try {
@@ -43,7 +44,7 @@ export class ProductRecipeController {
    * @param productId - Product ID.
    * @returns Array of recipe entries.
    */
-  @MessagePattern('product-recipe.findByProductId')
+  @MessagePattern(PRODUCT_COMMANDS.RECIPE_FIND_BY_PRODUCT)
   async findByProductId(@Payload('productId') productId: string) {
     this.logger.debug(`Finding all recipe entries for productId: ${productId}`);
     try {
@@ -63,13 +64,17 @@ export class ProductRecipeController {
    * @param replaceByProductIdDto - Object containing product ID and recipes array.
    * @returns Array of created recipe entries.
    */
-  @MessagePattern('product-recipe.replaceByProductId')
-  async replaceByProductId(@Payload() replaceByProductIdDto: ReplaceByProductIdDto) {
+  @MessagePattern(PRODUCT_COMMANDS.RECIPE_REPLACE_BY_PRODUCT)
+  async replaceByProductId(
+    @Payload() replaceByProductIdDto: ReplaceProductRecipesByProductIdDto,
+  ) {
     this.logger.debug(
       `Replacing recipes for productId: ${replaceByProductIdDto.productId}`,
     );
     try {
-      return await this.productRecipeService.replaceByProductId(replaceByProductIdDto);
+      return await this.productRecipeService.replaceByProductId(
+        replaceByProductIdDto,
+      );
     } catch (err) {
       this.logger.error(
         `Error replacing recipes for productId: ${replaceByProductIdDto.productId}`,
@@ -85,16 +90,13 @@ export class ProductRecipeController {
    * @param id - Recipe entry ID.
    * @returns Recipe entry details.
    */
-  @MessagePattern('product-recipe.findOne')
+  @MessagePattern(PRODUCT_COMMANDS.RECIPE_FIND_ONE)
   async findOne(@Payload('id') id: string) {
     this.logger.debug(`Finding recipe entry with id: ${id}`);
     try {
       return await this.productRecipeService.findOne(id);
     } catch (err) {
-      this.logger.error(
-        `Error finding recipe entry with id: ${id}`,
-        err.stack,
-      );
+      this.logger.error(`Error finding recipe entry with id: ${id}`, err.stack);
       if (err instanceof RpcException) throw err;
       throw new RpcException({ status: 500, message: err.message });
     }
@@ -105,16 +107,16 @@ export class ProductRecipeController {
    * @param updateProductRecipeDto - Object containing update data with ID.
    * @returns Updated recipe entry.
    */
-  @MessagePattern('product-recipe.update')
+  @MessagePattern(PRODUCT_COMMANDS.RECIPE_UPDATE)
   async update(@Payload() updateProductRecipeDto: UpdateProductRecipeDto) {
     this.logger.debug(
-      `Updating recipe entry with id: ${updateProductRecipeDto.id}`,
+      `Updating recipe entry with id: ${updateProductRecipeDto.productRecipeId}`,
     );
     try {
       return await this.productRecipeService.update(updateProductRecipeDto);
     } catch (err) {
       this.logger.error(
-        `Error updating recipe entry with id: ${updateProductRecipeDto.id}`,
+        `Error updating recipe entry with id: ${updateProductRecipeDto.productRecipeId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;
@@ -127,7 +129,7 @@ export class ProductRecipeController {
    * @param id - Recipe entry ID.
    * @returns Deleted recipe entry.
    */
-  @MessagePattern('product-recipe.remove')
+  @MessagePattern(PRODUCT_COMMANDS.RECIPE_REMOVE)
   async remove(@Payload('id') id: string) {
     this.logger.debug(`Removing recipe entry with id: ${id}`);
     try {
@@ -147,7 +149,7 @@ export class ProductRecipeController {
    * @param productId - Product ID.
    * @returns Number of deleted entries.
    */
-  @MessagePattern('product-recipe.removeByProductId')
+  @MessagePattern(PRODUCT_COMMANDS.RECIPE_REMOVE_BY_PRODUCT)
   async removeByProductId(@Payload('productId') productId: string) {
     this.logger.debug(
       `Removing all recipe entries for productId: ${productId}`,

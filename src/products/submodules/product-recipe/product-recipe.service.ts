@@ -8,26 +8,33 @@ import {
 import { PrismaClient } from '@prisma/client';
 import {
   CreateProductRecipeDto,
-  ReplaceByProductIdDto,
+  PRODUCT_EVENTS,
+  ReplaceProductRecipesByProductIdDto,
   UpdateProductRecipeDto,
-} from './dtos';
+  RecipeRelationship,
+  SubResourceResponseData,
+  DeleteSubResourceResponseData,
+  ReplaceSubResourceResponseData,
+} from 'qeai-sdk';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
-import { EVENTS, NATS_SERVICE } from 'src/common/constants';
+import { SERVICES } from 'qeai-sdk';
 
 /**
- * Service responsible for managing product recipes
- * Handles CRUD operations for product-ingredient relationships
+ * Service responsible for managing product-recipe relationships.
+ * Handles CRUD operations for product-ingredient associations.
  */
 @Injectable()
 export class ProductRecipeService extends PrismaClient implements OnModuleInit {
   private readonly logger = new Logger(ProductRecipeService.name);
 
-  constructor(@Inject(NATS_SERVICE) private readonly client: ClientProxy) {
+  constructor(
+    @Inject(SERVICES.NATS_SERVICE) private readonly client: ClientProxy,
+  ) {
     super();
   }
 
   /**
-   * Initialize database connection when module starts
+   * Initialize database connection when module starts.
    */
   async onModuleInit() {
     await this.$connect();
@@ -35,11 +42,13 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
   }
 
   /**
-   * Create a new product recipe entry
-   * @param createProductRecipeDto - Data for creating the recipe entry
-   * @returns Created recipe entry with a message (standardized)
+   * Create a new product-recipe relationship.
+   * @param createProductRecipeDto - Data for creating the relationship
+   * @returns Created product-recipe relationship
    */
-  async create(createProductRecipeDto: CreateProductRecipeDto) {
+  async create(
+    createProductRecipeDto: CreateProductRecipeDto,
+  ): Promise<SubResourceResponseData<RecipeRelationship, 'relationship'>> {
     this.logger.log(
       `Creating product-recipe relationship for product: ${createProductRecipeDto.productId}`,
     );
@@ -47,6 +56,9 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
       const created = await this.productRecipe.create({
         data: createProductRecipeDto,
         select: {
+          product: {
+            select: { name: true },
+          },
           id: true,
           quantity: true,
           productId: true,
@@ -62,13 +74,18 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
         },
       });
 
-      this.client.emit(EVENTS.PRODUCT_RECIPE_CREATED, {
+      this.client.emit(PRODUCT_EVENTS.RECIPE_CREATED, {
         productId: created.productId,
       });
-
+      const {
+        productId,
+        product: { name },
+        ...ingredient
+      } = created;
       return {
-        message: `Ingredient [${created.ingredient?.name}] was added to product successfully`,
-        ...created,
+        message: `Ingredient [${created.ingredient?.name}] was added to product [${name}] successfully`,
+        productId: productId,
+        relationship: ingredient,
       };
     } catch (error) {
       this.logger.error(
@@ -83,11 +100,11 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
   }
 
   /**
-   * Find all recipe entries for a product
+   * Find all recipe entries for a product.
    * @param productId - Product ID
-   * @returns Array of ingredient-only relationships for the product
+   * @returns Array of product-recipe relationships
    */
-  async findByProductId(productId: string) {
+  async findByProductId(productId: string): Promise<RecipeRelationship[]> {
     this.logger.log(
       `Finding all product-recipe relationships for productId: ${productId}`,
     );
@@ -103,6 +120,7 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
               id: true,
               name: true,
               unit: true,
+              status: true,
             },
           },
         },
@@ -122,12 +140,12 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
   }
 
   /**
-   * Find recipe entry by ID
-   * @param id - Recipe entry ID
-   * @returns Ingredient-only relationship details
-   * @throws RpcException if recipe entry not found
+   * Find a product-recipe relationship by ID.
+   * @param id - Recipe relationship ID
+   * @returns Product-recipe relationship details
+   * @throws RpcException if relationship not found
    */
-  async findOne(id: string) {
+  async findOne(id: string): Promise<RecipeRelationship> {
     try {
       const recipe = await this.productRecipe.findUnique({
         where: { id },
@@ -142,7 +160,7 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
       if (!recipe) {
         throw new RpcException({
           status: HttpStatus.NOT_FOUND,
-          message: `Product-recipe relationship not found`,
+          message: `Product-recipe relationship with id ${id} not found`,
         });
       }
       return recipe;
@@ -160,17 +178,19 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
   }
 
   /**
-   * Update recipe entry by ID
+   * Update a product-recipe relationship by ID.
    * @param updateProductRecipeDto - Update data
-   * @returns Updated ingredient relationship
+   * @returns Updated relationship
    */
-  async update(updateProductRecipeDto: UpdateProductRecipeDto) {
-    const { id, ...toUpdate } = updateProductRecipeDto;
-    await this.findOne(id); // Checks existence and throws RpcException if not found.
-    this.logger.log(`Updating product-recipe relationship: ${id}`);
+  async update(
+    updateProductRecipeDto: UpdateProductRecipeDto,
+  ): Promise<SubResourceResponseData<RecipeRelationship, 'relationship'>> {
+    const { productRecipeId, ...toUpdate } = updateProductRecipeDto;
+    await this.findOne(productRecipeId); // Checks existence and throws RpcException if not found.
+    this.logger.log(`Updating product-recipe relationship: ${productRecipeId}`);
     try {
       const updated = await this.productRecipe.update({
-        where: { id },
+        where: { id: productRecipeId },
         data: toUpdate,
         include: {
           ingredient: true,
@@ -178,12 +198,12 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
       });
       return {
         message: `Ingredient [${updated.ingredient?.name}] was updated successfully in product-recipe relationship`,
-        // id: updated.id,
-        ...updated.ingredient,
+        productId: updated.productId,
+        relationship: updated,
       };
     } catch (error) {
       this.logger.error(
-        `Error updating product-recipe relationship with id: ${id}`,
+        `Error updating product-recipe relationship with id: ${productRecipeId}`,
         error.stack || error.message,
       );
       if (error instanceof RpcException) throw error;
@@ -195,19 +215,19 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
   }
 
   /**
-   * Delete recipe entry by ID
-   * @param id - Recipe entry ID
-   * @returns Deleted recipe relationship message
+   * Delete a product-recipe relationship by ID.
+   * @param id - Recipe relationship ID
+   * @returns Delete response object
    */
-  async remove(id: string) {
+  async remove(id: string): Promise<DeleteSubResourceResponseData> {
     const recipe = await this.productRecipe.findUnique({
       where: { id },
-      include: { ingredient: true },
+      include: { ingredient: { select: { name: true, id: true } } },
     });
     if (!recipe) {
       throw new RpcException({
         status: HttpStatus.NOT_FOUND,
-        message: `Product-recipe relationship not found`,
+        message: `Product-recipe relationship with id ${id} not found`,
       });
     }
     this.logger.log(`Deleting product-recipe relationship: ${id}`);
@@ -217,7 +237,8 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
       });
       return {
         message: `Ingredient [${recipe.ingredient?.name}] was removed from product-recipe successfully`,
-        id,
+        productId: recipe.productId,
+        deletedCount: 1,
       };
     } catch (error) {
       this.logger.error(
@@ -233,11 +254,13 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
   }
 
   /**
-   * Delete all recipe entries for a product
+   * Delete all product-recipe relationships for a product.
    * @param productId - Product ID
-   * @returns Message and count of deleted relationships
+   * @returns Count of deleted relationships
    */
-  async removeByProductId(productId: string) {
+  async removeByProductId(
+    productId: string,
+  ): Promise<DeleteSubResourceResponseData> {
     this.logger.log(
       `Deleting all product-recipe relationships for product: ${productId}`,
     );
@@ -246,9 +269,7 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
         where: { productId },
       });
       return {
-        message: `${
-          result.count
-        } product-recipe relationships for product: ${productId} were deleted successfully`,
+        message: `${result.count} product-recipe relationships for product: [${productId}] were deleted successfully`,
         productId,
         deletedCount: result.count,
       };
@@ -266,7 +287,7 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
   }
 
   /**
-   * Bulk create recipe entries for a product
+   * Bulk create product-recipe relationships for a product.
    * @param productId - Product ID
    * @param recipes - Array of recipe data
    * @returns Message and count of created recipes
@@ -274,7 +295,7 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
   async bulkCreate(
     productId: string,
     recipes: Omit<CreateProductRecipeDto, 'productId'>[],
-  ) {
+  ): Promise<ReplaceSubResourceResponseData> {
     this.logger.log(
       `Bulk creating product-recipe relationships for product: ${productId}`,
     );
@@ -283,16 +304,18 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
         ...recipe,
         productId,
       }));
-      const { count } = await this.productRecipe.createMany({
+
+      const result = await this.productRecipe.createMany({
         data: recipeData,
       });
 
-      if (count) this.client.emit(EVENTS.PRODUCT_RECIPE_CREATED, { productId });
+      if (result.count)
+        this.client.emit(PRODUCT_EVENTS.RECIPE_CREATED, { productId });
 
       return {
-        message: `${count} product-recipe relationships for product ${productId} have been created successfully.`,
+        message: `${result.count} product-recipe relationships for product ${productId} have been created successfully.`,
         productId,
-        createdCount: count,
+        createdCount: result.count,
       };
     } catch (error) {
       this.logger.error(
@@ -307,11 +330,13 @@ export class ProductRecipeService extends PrismaClient implements OnModuleInit {
   }
 
   /**
-   * Replace all recipe entries for a product
+   * Replace all product-recipe relationships for a product.
    * @param replaceByProductIdDto - Replace data with product ID and recipes
    * @returns Message and count of created recipes
    */
-  async replaceByProductId(replaceByProductIdDto: ReplaceByProductIdDto) {
+  async replaceByProductId(
+    replaceByProductIdDto: ReplaceProductRecipesByProductIdDto,
+  ): Promise<ReplaceSubResourceResponseData> {
     const { productId, recipes } = replaceByProductIdDto;
     this.logger.log(
       `Replacing all product-recipe relationships for product: ${productId}`,

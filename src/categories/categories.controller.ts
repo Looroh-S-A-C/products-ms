@@ -1,8 +1,13 @@
 import { Controller, Logger } from '@nestjs/common';
 import { CategoriesService } from './categories.service';
 import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
-import { CreateCategoryDto, UpdateCategoryDto, DeleteCategoryDto } from './dtos';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import {
+  CATEGORY_COMMANDS,
+  CreateCategoryDto,
+  UpdateCategoryDto,
+  DeleteCategoryDto,
+  PaginationDto,
+} from 'qeai-sdk';
 
 /**
  * Controller for managing categories.
@@ -23,7 +28,7 @@ export class CategoriesController {
    * @param createCategoryDto Category creation data.
    * @returns Created category.
    */
-  @MessagePattern('category.create')
+  @MessagePattern(CATEGORY_COMMANDS.CREATE)
   async createCategory(@Payload() createCategoryDto: CreateCategoryDto) {
     this.logger.debug('Creating a new category');
     try {
@@ -40,7 +45,7 @@ export class CategoriesController {
    * @param paginationDto Pagination parameters.
    * @returns Paginated list of categories.
    */
-  @MessagePattern('category.find-all')
+  @MessagePattern(CATEGORY_COMMANDS.FIND_ALL)
   async findAllCategories(@Payload() paginationDto: PaginationDto) {
     this.logger.debug(
       `Fetching all categories. Page: ${paginationDto.page}, Limit: ${paginationDto.limit}`,
@@ -59,7 +64,7 @@ export class CategoriesController {
    * @param id Category ID.
    * @returns The category details.
    */
-  @MessagePattern('category.find-one')
+  @MessagePattern(CATEGORY_COMMANDS.FIND_ONE)
   async findOneCategory(@Payload('id') id: string) {
     this.logger.debug(`Fetching category with id: ${id}`);
     try {
@@ -76,14 +81,16 @@ export class CategoriesController {
    * @param updateCategoryDto Data containing ID and update information.
    * @returns Updated category.
    */
-  @MessagePattern('category.update')
+  @MessagePattern(CATEGORY_COMMANDS.UPDATE)
   async updateCategory(@Payload() updateCategoryDto: UpdateCategoryDto) {
-    this.logger.debug(`Updating category with id: ${updateCategoryDto.id}`);
+    this.logger.debug(
+      `Updating category with id: ${updateCategoryDto.categoryId}`,
+    );
     try {
       return await this.categoriesService.update(updateCategoryDto);
     } catch (err) {
       this.logger.error(
-        `Error updating category with id: ${updateCategoryDto.id}`,
+        `Error updating category with id: ${updateCategoryDto.categoryId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;
@@ -96,14 +103,16 @@ export class CategoriesController {
    * @param deleteCategoryDto Data containing ID and deletedBy info.
    * @returns Deleted (soft deleted) category.
    */
-  @MessagePattern('category.delete')
+  @MessagePattern(CATEGORY_COMMANDS.DELETE)
   async deleteCategory(@Payload() deleteCategoryDto: DeleteCategoryDto) {
-    this.logger.debug(`Deleting category with id: ${deleteCategoryDto.id}`);
+    this.logger.debug(
+      `Deleting category with id: ${deleteCategoryDto.categoryId}`,
+    );
     try {
       return await this.categoriesService.delete(deleteCategoryDto);
     } catch (err) {
       this.logger.error(
-        `Error deleting category with id: ${deleteCategoryDto.id}`,
+        `Error deleting category with id: ${deleteCategoryDto.categoryId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;

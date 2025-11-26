@@ -10,6 +10,8 @@
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "yarn run prisma:dev && nest start --watch",
+    "qeai-sdk-dev": "yarn remove qeai-sdk && yarn add qeai-sdk",
+    "qeai-sdk-local": "yarn remove qeai-sdk && yarn add file:../packages/qhay-interfaces",
     "prisma:dev": "npx prisma generate",
     "prisma:dev-old": "yarn prisma migrate reset --force && yarn prisma migrate dev --name auto-$(date +%Y%m%d%H%M%S) && prisma generate",
     "start:debug": "nest start --debug --watch",
@@ -33,6 +35,7 @@
     "class-validator": "^0.14.2",
     "dotenv": "^16.5.0",
     "joi": "^17.13.3",
+    "qeai-sdk": "file:../packages/qhay-interfaces",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },

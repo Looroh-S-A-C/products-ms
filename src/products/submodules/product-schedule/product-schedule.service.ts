@@ -2,15 +2,28 @@ import { Injectable, Logger, OnModuleInit, HttpStatus } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import {
   CreateProductScheduleDto,
-  ReplaceByProductIdDto,
+  ReplaceProductSchedulesByProductIdDto,
   IsAvailableAtTimeDto,
   UpdateProductScheduleDto,
-} from './dtos';
+  SubResourceResponseData,
+  ReplaceSubResourceResponseData,
+  DeleteSubResourceResponseData,
+  ProductSchedule
+} from 'qeai-sdk';
 import { RpcException } from '@nestjs/microservices';
 
 /**
- * Service responsible for managing product schedules
- * Handles CRUD operations for product availability schedules
+ * Type that defines the response for single schedule operations.
+ */
+type WriteProductScheduleResponse = SubResourceResponseData<
+  Omit<ProductSchedule, 'productId'>,
+  'schedule'
+>;
+
+/**
+ * Service responsible for managing product schedules.
+ * Handles CRUD operations for product availability schedules,
+ * consistent with project standards and type-safe responses.
  */
 @Injectable()
 export class ProductScheduleService
@@ -22,27 +35,38 @@ export class ProductScheduleService
   /**
    * Initialize database connection when module starts
    */
-  onModuleInit() {
-    this.$connect();
+  async onModuleInit() {
+    await this.$connect();
     this.logger.log('Database connected');
   }
 
   /**
-   * Create a new product schedule
-   * @param createProductScheduleDto - Data for creating the schedule
-   * @returns Created product schedule
+   * Create a new product schedule.
+   * @param createProductScheduleDto Data for creating the schedule.
+   * @returns Created product schedule.
    */
-  async create(createProductScheduleDto: CreateProductScheduleDto) {
+  async create(
+    createProductScheduleDto: CreateProductScheduleDto,
+  ): Promise<WriteProductScheduleResponse> {
     try {
       this.logger.log(
         `Creating product schedule for product: ${createProductScheduleDto.productId}`,
       );
       const created = await this.productSchedule.create({
         data: createProductScheduleDto,
+        include: {
+          product: {
+            select: {
+              name: true,
+            },
+          },
+        },
       });
+      const { productId, product, ...schedule } = created;
       return {
-        message: `Product schedule was created successfully`,
-        schedule: created,
+        message: `Product schedule for product: [${product.name}] was created successfully`,
+        productId,
+        schedule,
       };
     } catch (error) {
       this.logger.error(
@@ -57,14 +81,22 @@ export class ProductScheduleService
   }
 
   /**
-   * Find all schedules for a product
-   * @param productId - Product ID
-   * @returns Array of product schedules
+   * Find all schedules for a product.
+   * @param productId Product ID.
+   * @returns Array of product schedules.
    */
-  async findByProductId(productId: string) {
+  async findByProductId(
+    productId: string,
+  ): Promise<Omit<ProductSchedule, 'productId'>[]> {
     try {
       const schedules = await this.productSchedule.findMany({
         where: { productId },
+        select: {
+          id: true,
+          dayOfWeek: true,
+          startTime: true,
+          endTime: true,
+        },
         orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
       });
       return schedules;
@@ -81,12 +113,12 @@ export class ProductScheduleService
   }
 
   /**
-   * Find product schedule by ID
-   * @param id - Product schedule ID
-   * @returns Product schedule details
-   * @throws RpcException if product schedule not found
+   * Find product schedule by ID.
+   * @param id Product schedule ID.
+   * @returns Product schedule details.
+   * @throws RpcException if product schedule not found.
    */
-  async findOne(id: string) {
+  async findOne(id: string): Promise<ProductSchedule> {
     try {
       const productSchedule = await this.productSchedule.findUnique({
         where: { id },
@@ -114,27 +146,34 @@ export class ProductScheduleService
   }
 
   /**
-   * Update product schedule by ID
-   * @param updateProductScheduleDto - Update data with ID
-   * @returns Updated product schedule
+   * Update product schedule by ID.
+   * @param updateProductScheduleDto Update data with ID.
+   * @returns Success message and updated product schedule.
    */
-  async update(updateProductScheduleDto: UpdateProductScheduleDto) {
-    const { id, ...toUpdate } = updateProductScheduleDto;
+  async update(
+    updateProductScheduleDto: UpdateProductScheduleDto,
+  ): Promise<WriteProductScheduleResponse> {
+    const { productScheduleId, ...toUpdate } = updateProductScheduleDto;
     try {
-      await this.findOne(id);
+      const existing = await this.findOne(productScheduleId);
 
-      this.logger.log(`Updating product schedule: ${id}`);
+      this.logger.log(`Updating product schedule: ${productScheduleId}`);
       const updated = await this.productSchedule.update({
-        where: { id },
+        where: { id: productScheduleId },
         data: toUpdate,
+        include: {
+          product: { select: { name: true } },
+        },
       });
+      const { product, productId, ...schedule } = updated;
       return {
-        message: `Product schedule was updated successfully`,
-        schedule: updated,
+        message: `Product schedule: [${productScheduleId}] for product [${product.name}] was updated successfully`,
+        productId: existing.productId,
+        schedule,
       };
     } catch (error) {
       this.logger.error(
-        `Error updating product schedule with id: ${id}`,
+        `Error updating product schedule with id: ${productScheduleId}`,
         error.stack || error.message,
       );
       if (error instanceof RpcException) throw error;
@@ -146,19 +185,23 @@ export class ProductScheduleService
   }
 
   /**
-   * Delete product schedule by ID
-   * @param id - Product schedule ID
-   * @returns Success message
+   * Delete product schedule by ID.
+   * @param id Product schedule ID.
+   * @returns Success message and deleted count.
    */
-  async remove(id: string) {
+  async remove(id: string): Promise<DeleteSubResourceResponseData> {
     try {
-      await this.findOne(id);
+      const found = await this.findOne(id);
       this.logger.log(`Deleting product schedule: ${id}`);
-      await this.productSchedule.delete({
+      const deleted = await this.productSchedule.delete({
         where: { id },
+        include: { product: { select: { name: true } } },
       });
+      const { productId, product } = deleted;
       return {
-        message: `Product schedule: ${id} was deleted successfully`,
+        message: `Product schedule [${id}] for product [${product.name}] was deleted successfully`,
+        productId,
+        deletedCount: 1,
       };
     } catch (error) {
       this.logger.error(
@@ -174,18 +217,22 @@ export class ProductScheduleService
   }
 
   /**
-   * Delete all schedules for a product
-   * @param productId - Product ID
-   * @returns Success message with number of deleted schedules
+   * Delete all schedules for a product.
+   * @param productId Product ID.
+   * @returns Success message with number of deleted schedules.
    */
-  async removeByProductId(productId: string) {
+  async removeByProductId(
+    productId: string,
+  ): Promise<DeleteSubResourceResponseData> {
     try {
       this.logger.log(`Deleting all schedules for product: ${productId}`);
       const result = await this.productSchedule.deleteMany({
         where: { productId },
       });
       return {
-        message: `${result.count} product schedules for product: ${productId} were deleted successfully`,
+        message: `${result.count} schedules for product: ${productId} were deleted successfully`,
+        productId,
+        deletedCount: result.count,
       };
     } catch (error) {
       this.logger.error(
@@ -201,15 +248,15 @@ export class ProductScheduleService
   }
 
   /**
-   * Bulk create schedules for a product
-   * @param productId - Product ID
-   * @param schedules - Array of schedule data
-   * @returns Success message with count of created schedules
+   * Bulk create schedules for a product.
+   * @param productId Product ID.
+   * @param schedules Array of schedule data.
+   * @returns Success message with count of created schedules.
    */
   async bulkCreate(
     productId: string,
     schedules: Omit<CreateProductScheduleDto, 'productId'>[],
-  ) {
+  ): Promise<ReplaceSubResourceResponseData> {
     try {
       this.logger.log(`Bulk creating schedules for product: ${productId}`);
 
@@ -222,7 +269,9 @@ export class ProductScheduleService
         data: scheduleData,
       });
       return {
-        message: `${count} product schedules for product ${productId} have been created successfully.`,
+        message: `${count} schedules for product ${productId} have been created successfully.`,
+        productId,
+        createdCount: count,
       };
     } catch (error) {
       this.logger.error(
@@ -237,11 +286,13 @@ export class ProductScheduleService
   }
 
   /**
-   * Replace all schedules for a product
-   * @param replaceByProductIdDto - Replace data with product ID and schedules
-   * @returns Success message with count of created schedules
+   * Replace all schedules for a product.
+   * @param replaceByProductIdDto Replace data with product ID and schedules.
+   * @returns Success message with count of created schedules.
    */
-  async replaceByProductId(replaceByProductIdDto: ReplaceByProductIdDto) {
+  async replaceByProductId(
+    replaceByProductIdDto: ReplaceProductSchedulesByProductIdDto,
+  ): Promise<ReplaceSubResourceResponseData> {
     const { productId, schedules } = replaceByProductIdDto;
     try {
       this.logger.log(`Replacing all schedules for product: ${productId}`);
@@ -250,7 +301,7 @@ export class ProductScheduleService
       await this.removeByProductId(productId);
 
       // Create new schedules
-      return this.bulkCreate(productId, schedules);
+      return await this.bulkCreate(productId, schedules);
     } catch (error) {
       this.logger.error(
         'Error replacing product schedules',
@@ -264,11 +315,13 @@ export class ProductScheduleService
   }
 
   /**
-   * Check if product is available at specific time
-   * @param isAvailableAtTimeDto - Availability check data
-   * @returns Boolean indicating availability
+   * Check if product is available at specific time.
+   * @param isAvailableAtTimeDto Availability check data.
+   * @returns Boolean indicating availability.
    */
-  async isAvailableAtTime(isAvailableAtTimeDto: IsAvailableAtTimeDto) {
+  async isAvailableAtTime(
+    isAvailableAtTimeDto: IsAvailableAtTimeDto,
+  ): Promise<{ isAvailable: boolean }> {
     const { productId, dayOfWeek, time } = isAvailableAtTimeDto;
     try {
       const schedule = await this.productSchedule.findFirst({

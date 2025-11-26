@@ -4,10 +4,12 @@ import {
   CreateIngredientDto,
   UpdateIngredientDto,
   DeleteIngredientDto,
-} from './dtos';
-import { PaginationDto } from '../common/dto/pagination.dto';
+  PaginationDto,
+  SearchByNameDto,
+  Ingredient,
+  PaginationResponse,
+} from 'qeai-sdk';
 import { RpcException } from '@nestjs/microservices';
-import { SearchByNameDto } from './dtos/search-by-name.dto';
 
 /**
  * Service responsible for managing ingredients in the system
@@ -30,7 +32,7 @@ export class IngredientsService extends PrismaClient implements OnModuleInit {
    * @param createIngredientDto - Data for creating the ingredient
    * @returns Created ingredient
    */
-  async create(createIngredientDto: CreateIngredientDto) {
+  async create(createIngredientDto: CreateIngredientDto): Promise<Ingredient> {
     this.logger.log(`Creating ingredient: ${createIngredientDto.name}`);
     return this.ingredient.create({
       data: createIngredientDto,
@@ -42,7 +44,9 @@ export class IngredientsService extends PrismaClient implements OnModuleInit {
    * @param paginationDto - Pagination parameters
    * @returns Paginated list of ingredients
    */
-  async findAll(paginationDto: PaginationDto) {
+  async findAll(
+    paginationDto: PaginationDto,
+  ): Promise<PaginationResponse<Ingredient>> {
     const { limit, page } = paginationDto;
     const where = {
       status: true,
@@ -73,7 +77,7 @@ export class IngredientsService extends PrismaClient implements OnModuleInit {
    * @returns Ingredient details
    * @throws NotFoundException if ingredient not found
    */
-  async findOne(id: string) {
+  async findOne(id: string): Promise<Ingredient> {
     const ingredient = await this.ingredient.findUnique({
       where: {
         id,
@@ -97,29 +101,29 @@ export class IngredientsService extends PrismaClient implements OnModuleInit {
    * @param updateIngredientDto - Update data
    * @returns Updated ingredient
    */
-  async update(updateIngredientDto: UpdateIngredientDto) {
-    const { id, ...toUpdate } = updateIngredientDto;
-    await this.findOne(id);
+  async update(updateIngredientDto: UpdateIngredientDto): Promise<Ingredient> {
+    const { ingredientId, ...toUpdate } = updateIngredientDto;
+    await this.findOne(ingredientId!);
 
-    this.logger.log(`Updating ingredient: ${id}`);
+    this.logger.log(`Updating ingredient: ${ingredientId}`);
     return this.ingredient.update({
-      where: { id },
+      where: { id: ingredientId },
       data: toUpdate,
     });
   }
 
   /**
-   * Soft delete ingredient by ID
+   * Soft delete ingredient by ingredientId
    * @param deleteIngredientDto - Delete data including deletedBy
    * @returns Updated ingredient
    */
-  async remove(deleteIngredientDto: DeleteIngredientDto) {
-    const { id, deletedBy } = deleteIngredientDto;
-    await this.findOne(id);
+  async remove(deleteIngredientDto: DeleteIngredientDto): Promise<Ingredient> {
+    const { ingredientId, deletedBy } = deleteIngredientDto;
+    await this.findOne(ingredientId);
 
-    this.logger.log(`Soft deleting ingredient: ${id}`);
+    this.logger.log(`Soft deleting ingredient: ${ingredientId}`);
     return this.ingredient.update({
-      where: { id },
+      where: { id: ingredientId },
       data: {
         status: false,
         deletedAt: new Date(),
@@ -134,25 +138,25 @@ export class IngredientsService extends PrismaClient implements OnModuleInit {
    * @returns Array of valid ingredients
    * @throws NotFoundException if any ingredient not found
    */
-  async validateIngredients(ids: string[]) {
-    const uniqueIds = Array.from(new Set(ids));
-    const ingredients = await this.ingredient.findMany({
-      where: {
-        id: { in: uniqueIds },
-        status: true,
-        deletedAt: null,
-      },
-    });
+  // async validateIngredients(ids: string[]) {
+  //   const uniqueIds = Array.from(new Set(ids));
+  //   const ingredients = await this.ingredient.findMany({
+  //     where: {
+  //       id: { in: uniqueIds },
+  //       status: true,
+  //       deletedAt: null,
+  //     },
+  //   });
 
-    if (ingredients.length !== uniqueIds.length) {
-      throw new RpcException({
-        status: 404,
-        message: 'Some ingredients were not found',
-      });
-    }
+  //   if (ingredients.length !== uniqueIds.length) {
+  //     throw new RpcException({
+  //       status: 404,
+  //       message: 'Some ingredients were not found',
+  //     });
+  //   }
 
-    return ingredients;
-  }
+  //   return ingredients;
+  // }
 
   /**
    * Search ingredients by name
@@ -160,8 +164,10 @@ export class IngredientsService extends PrismaClient implements OnModuleInit {
    * @param paginationDto - Pagination parameters
    * @returns Paginated list of of matching ingredients
    */
-  async searchByName(searchByName: SearchByNameDto) {
-    const { limit , page, name } = searchByName;
+  async searchByName(
+    searchByName: SearchByNameDto,
+  ): Promise<PaginationResponse<Ingredient>> {
+    const { limit, page, name } = searchByName;
     const where = {
       status: true,
       deletedAt: null,

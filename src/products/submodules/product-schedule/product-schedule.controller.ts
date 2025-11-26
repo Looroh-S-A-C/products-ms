@@ -1,12 +1,13 @@
 import { Controller, Logger } from '@nestjs/common';
 import { ProductScheduleService } from './product-schedule.service';
+import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
 import {
+  PRODUCT_COMMANDS,
   CreateProductScheduleDto,
   UpdateProductScheduleDto,
-  ReplaceByProductIdDto,
+  ReplaceProductSchedulesByProductIdDto,
   IsAvailableAtTimeDto,
-} from './dtos';
-import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
+} from 'qeai-sdk';
 
 /**
  * Controller for managing product schedules.
@@ -29,7 +30,7 @@ export class ProductScheduleController {
    * @param createProductScheduleDto - Object containing schedule creation data.
    * @returns Created product schedule.
    */
-  @MessagePattern('product-schedule.create')
+  @MessagePattern(PRODUCT_COMMANDS.SCHEDULE_CREATE)
   async create(@Payload() createProductScheduleDto: CreateProductScheduleDto) {
     this.logger.debug('Creating a new product schedule');
     try {
@@ -46,7 +47,7 @@ export class ProductScheduleController {
    * @param productId - String identifier for the product.
    * @returns Array of product schedules.
    */
-  @MessagePattern('product-schedule.findByProductId')
+  @MessagePattern(PRODUCT_COMMANDS.SCHEDULE_FIND_BY_PRODUCT)
   async findByProductId(@Payload('productId') productId: string) {
     this.logger.debug(`Finding all schedules for productId: ${productId}`);
     try {
@@ -66,8 +67,10 @@ export class ProductScheduleController {
    * @param replaceByProductIdDto - Object containing product ID and schedules array.
    * @returns Array of created schedules.
    */
-  @MessagePattern('product-schedule.replaceByProductId')
-  async replaceByProductId(@Payload() replaceByProductIdDto: ReplaceByProductIdDto) {
+  @MessagePattern(PRODUCT_COMMANDS.SCHEDULE_REPLACE_BY_PRODUCT)
+  async replaceByProductId(
+    @Payload() replaceByProductIdDto: ReplaceProductSchedulesByProductIdDto,
+  ) {
     this.logger.debug(
       `Replacing schedules for productId: ${replaceByProductIdDto.productId}`,
     );
@@ -90,13 +93,17 @@ export class ProductScheduleController {
    * @param isAvailableAtTimeDto - Object containing product ID, day of week and time.
    * @returns Boolean indicating availability.
    */
-  @MessagePattern('product-schedule.isAvailableAtTime')
-  async isAvailableAtTime(@Payload() isAvailableAtTimeDto: IsAvailableAtTimeDto) {
+  @MessagePattern(PRODUCT_COMMANDS.SCHEDULE_IS_AVAILABLE_AT_TIME)
+  async isAvailableAtTime(
+    @Payload() isAvailableAtTimeDto: IsAvailableAtTimeDto,
+  ) {
     this.logger.debug(
       `Checking availability for productId: ${isAvailableAtTimeDto.productId} at ${isAvailableAtTimeDto.time} on ${isAvailableAtTimeDto.dayOfWeek}`,
     );
     try {
-      return await this.productScheduleService.isAvailableAtTime(isAvailableAtTimeDto);
+      return await this.productScheduleService.isAvailableAtTime(
+        isAvailableAtTimeDto,
+      );
     } catch (err) {
       this.logger.error(
         `Error checking availability for productId: ${isAvailableAtTimeDto.productId}`,
@@ -112,7 +119,7 @@ export class ProductScheduleController {
    * @param id - String identifier for the product schedule.
    * @returns Product schedule details.
    */
-  @MessagePattern('product-schedule.findOne')
+  @MessagePattern(PRODUCT_COMMANDS.SCHEDULE_FIND_ONE)
   async findOne(@Payload('id') id: string) {
     this.logger.debug(`Finding product schedule with id: ${id}`);
     try {
@@ -132,16 +139,16 @@ export class ProductScheduleController {
    * @param updateProductScheduleDto - Object containing ID and update data.
    * @returns Updated product schedule.
    */
-  @MessagePattern('product-schedule.update')
+  @MessagePattern(PRODUCT_COMMANDS.SCHEDULE_UPDATE)
   async update(@Payload() updateProductScheduleDto: UpdateProductScheduleDto) {
     this.logger.debug(
-      `Updating product schedule with id: ${updateProductScheduleDto.id}`,
+      `Updating product schedule with id: ${updateProductScheduleDto.productScheduleId}`,
     );
     try {
       return await this.productScheduleService.update(updateProductScheduleDto);
     } catch (err) {
       this.logger.error(
-        `Error updating product schedule with id: ${updateProductScheduleDto.id}`,
+        `Error updating product schedule with id: ${updateProductScheduleDto.productScheduleId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;
@@ -154,7 +161,7 @@ export class ProductScheduleController {
    * @param id - String identifier for the product schedule.
    * @returns Deleted product schedule.
    */
-  @MessagePattern('product-schedule.remove')
+  @MessagePattern(PRODUCT_COMMANDS.SCHEDULE_REMOVE)
   async remove(@Payload('id') id: string) {
     this.logger.debug(`Removing (soft) product schedule with id: ${id}`);
     try {
@@ -174,7 +181,7 @@ export class ProductScheduleController {
    * @param productId - String identifier for the product.
    * @returns Number of deleted schedules.
    */
-  @MessagePattern('product-schedule.removeByProductId')
+  @MessagePattern(PRODUCT_COMMANDS.SCHEDULE_REMOVE_BY_PRODUCT)
   async removeByProductId(@Payload('productId') productId: string) {
     this.logger.debug(
       `Removing all product schedules for productId: ${productId}`,

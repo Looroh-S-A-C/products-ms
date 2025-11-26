@@ -1,12 +1,13 @@
 import { Controller, Logger } from '@nestjs/common';
 import { ProductImageService } from './product-image.service';
+import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
 import {
+  PRODUCT_COMMANDS,
   CreateProductImageDto,
   UpdateProductImageDto,
   BulkCreateProductImageDto,
   SetPrimaryImageDto,
-} from './dtos';
-import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
+} from 'qeai-sdk';
 
 /**
  * Controller for managing product images.
@@ -23,7 +24,7 @@ export class ProductImageController {
    * @param createProductImageDto Object containing image creation data.
    * @returns Created product image.
    */
-  @MessagePattern('product-image.create')
+  @MessagePattern(PRODUCT_COMMANDS.IMAGE_CREATE)
   async create(@Payload() createProductImageDto: CreateProductImageDto) {
     this.logger.debug('Creating a new product image');
     try {
@@ -40,7 +41,7 @@ export class ProductImageController {
    * @param productId String identifier for the product.
    * @returns Array of product images.
    */
-  @MessagePattern('product-image.findByProductId')
+  @MessagePattern(PRODUCT_COMMANDS.IMAGE_FIND_BY_PRODUCT)
   async findByProductId(@Payload('productId') productId: string) {
     this.logger.debug(`Finding all images for productId: ${productId}`);
     try {
@@ -60,7 +61,7 @@ export class ProductImageController {
    * @param bulkCreateProductImageDto Object containing product ID and images array.
    * @returns Array of created images.
    */
-  @MessagePattern('product-image.bulkCreate')
+  @MessagePattern(PRODUCT_COMMANDS.IMAGE_BULK_CREATE)
   async bulkCreate(
     @Payload() bulkCreateProductImageDto: BulkCreateProductImageDto,
   ) {
@@ -86,7 +87,7 @@ export class ProductImageController {
    * @param setPrimaryImageDto Object containing product ID and image ID.
    * @returns Updated image.
    */
-  @MessagePattern('product-image.setPrimary')
+  @MessagePattern(PRODUCT_COMMANDS.IMAGE_SET_PRIMARY)
   async setPrimary(@Payload() setPrimaryImageDto: SetPrimaryImageDto) {
     this.logger.debug(
       `Setting primary image for productId: ${setPrimaryImageDto.productId} and imageId: ${setPrimaryImageDto.imageId}`,
@@ -108,7 +109,7 @@ export class ProductImageController {
    * @param id String identifier for the product image.
    * @returns Product image details.
    */
-  @MessagePattern('product-image.findOne')
+  @MessagePattern(PRODUCT_COMMANDS.IMAGE_FIND_ONE)
   async findOne(@Payload('id') id: string) {
     this.logger.debug(`Finding product image with id: ${id}`);
     try {
@@ -128,19 +129,19 @@ export class ProductImageController {
    * @param updateProductImageDto Object containing ID and update data.
    * @returns Updated product image.
    */
-  @MessagePattern('product-image.update')
+  @MessagePattern(PRODUCT_COMMANDS.IMAGE_UPDATE)
   async update(
     @Payload()
     updateProductImageDto: UpdateProductImageDto,
   ) {
     this.logger.debug(
-      `Updating product image with id: ${updateProductImageDto.id}`,
+      `Updating product image with id: ${updateProductImageDto.productImageId}`,
     );
     try {
       return await this.productImageService.update(updateProductImageDto);
     } catch (err) {
       this.logger.error(
-        `Error updating product image with id: ${updateProductImageDto.id}`,
+        `Error updating product image with id: ${updateProductImageDto.productImageId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;
@@ -153,7 +154,7 @@ export class ProductImageController {
    * @param removeProductImageDto Object containing ID and deletedBy.
    * @returns Updated (soft-deleted) product image.
    */
-  @MessagePattern('product-image.remove')
+  @MessagePattern(PRODUCT_COMMANDS.IMAGE_REMOVE)
   async remove(@Payload('id') id: string) {
     this.logger.debug(`Removing (soft) product image with id: ${id}`);
     try {
@@ -173,7 +174,7 @@ export class ProductImageController {
    * @param removeByProductIdDto Object containing productId and deletedBy.
    * @returns Number of deleted images.
    */
-  @MessagePattern('product-image.removeByProductId')
+  @MessagePattern(PRODUCT_COMMANDS.IMAGE_REMOVE_BY_PRODUCT)
   async removeByProductId(@Payload('productId') productId: string) {
     this.logger.debug(
       `Removing all product images for productId: ${productId}`,

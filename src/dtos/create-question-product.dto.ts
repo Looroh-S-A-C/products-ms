@@ -1,5 +1,5 @@
 import { IsString, IsNumber, IsEnum, Min, IsOptional } from 'class-validator';
-import { QuestionProductType } from '../enums/question-product-type.enum';
+import { QuestionProductType } from 'qeai-sdk';
 
 /**
  * DTO for creating a question-product relationship

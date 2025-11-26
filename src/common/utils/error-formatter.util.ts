@@ -1,7 +1,6 @@
 import { HttpException } from '@nestjs/common';
 import { getErrorMessage } from './get-error-message.util';
-import { validateListeningError } from './validate-listening-error';
-import { RpcError } from '../interfaces/rpc-error.interface';
+import { RpcError } from 'qeai-sdk';
 
 export const formatError = (
   exception: any,
@@ -9,8 +8,6 @@ export const formatError = (
   if (exception instanceof HttpException) {
     console.debug('Exception Is Instanceof HTTPEXCEPTION');
     const response = exception.getResponse?.();
-    // const listeningError = validateListeningError(exception, timestamp);
-    // if (listeningError) return listeningError;
     const errorMessage = getErrorMessage(response);
     return {
       status: exception.getStatus(),

@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsBoolean, IsNumber, IsEnum, Min } from 'class-validator';
-import { QuestionType } from '../enums/question-type.enum';
+import { QuestionType } from 'qeai-sdk';
 
 /**
  * DTO for creating a question

@@ -1,12 +1,13 @@
 import { Controller, Logger } from '@nestjs/common';
 import { ProductQuestionService } from './product-question.service';
+import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
 import {
+  PRODUCT_COMMANDS,
   CreateProductQuestionDto,
   UpdateProductQuestionDto,
-  FindByProductIdAndTypeDto,
-  ReplaceByProductIdDto,
-} from './dtos';
-import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
+  FindProductQuestionByProductIdAndTypeDto,
+  ReplaceProductQuestionsByProductIdDto,
+} from 'qeai-sdk';
 
 /**
  * Controller for managing product-question relationships.
@@ -25,13 +26,16 @@ export class ProductQuestionController {
    * @param createProductQuestionDto - Object containing relationship creation data
    * @returns Created product-question relationship
    */
-  @MessagePattern('product-question.create')
+  @MessagePattern(PRODUCT_COMMANDS.QUESTION_CREATE)
   async create(@Payload() createProductQuestionDto: CreateProductQuestionDto) {
     this.logger.debug('Creating a new product-question relationship');
     try {
       return await this.productQuestionService.create(createProductQuestionDto);
     } catch (err) {
-      this.logger.error('Error creating product-question relationship', err.stack);
+      this.logger.error(
+        'Error creating product-question relationship',
+        err.stack,
+      );
       if (err instanceof RpcException) throw err;
       throw new RpcException({ status: 500, message: err.message });
     }
@@ -42,9 +46,11 @@ export class ProductQuestionController {
    * @param productId - Product ID
    * @returns Array of product-question relationships
    */
-  @MessagePattern('product-question.findByProductId')
+  @MessagePattern(PRODUCT_COMMANDS.QUESTION_FIND_BY_PRODUCT)
   async findByProductId(@Payload('productId') productId: string) {
-    this.logger.debug(`Finding all product-question relationships for productId: ${productId}`);
+    this.logger.debug(
+      `Finding all product-question relationships for productId: ${productId}`,
+    );
     try {
       return await this.productQuestionService.findByProductId(productId);
     } catch (err) {
@@ -62,9 +68,10 @@ export class ProductQuestionController {
    * @param findByProductIdAndTypeDto - Object containing product ID and question type
    * @returns Array of product-question relationships
    */
-  @MessagePattern('product-question.findByProductIdAndType')
+  @MessagePattern(PRODUCT_COMMANDS.QUESTION_FIND_BY_PRODUCT_AND_TYPE)
   async findByProductIdAndType(
-    @Payload() findByProductIdAndTypeDto: FindByProductIdAndTypeDto,
+    @Payload()
+    findByProductIdAndTypeDto: FindProductQuestionByProductIdAndTypeDto,
   ) {
     this.logger.debug(
       `Finding product-question relationships by productId and type: ${JSON.stringify(findByProductIdAndTypeDto)}`,
@@ -88,8 +95,10 @@ export class ProductQuestionController {
    * @param replaceByProductIdDto - Object containing product ID, questions array and deletedBy
    * @returns Array of created relationships
    */
-  @MessagePattern('product-question.replaceByProductId')
-  async replaceByProductId(@Payload() replaceByProductIdDto: ReplaceByProductIdDto) {
+  @MessagePattern(PRODUCT_COMMANDS.QUESTION_REPLACE_BY_PRODUCT)
+  async replaceByProductId(
+    @Payload() replaceByProductIdDto: ReplaceProductQuestionsByProductIdDto,
+  ) {
     this.logger.debug(
       `Replacing product-question relationships for productId: ${replaceByProductIdDto.productId}`,
     );
@@ -112,7 +121,7 @@ export class ProductQuestionController {
    * @param id - Relationship ID
    * @returns Product-question relationship details
    */
-  @MessagePattern('product-question.findOne')
+  @MessagePattern(PRODUCT_COMMANDS.QUESTION_FIND_ONE)
   async findOne(@Payload('id') id: string) {
     this.logger.debug(`Finding product-question relationship with id: ${id}`);
     try {
@@ -132,16 +141,16 @@ export class ProductQuestionController {
    * @param updateProductQuestionDto - Object containing ID and update data
    * @returns Updated product-question relationship
    */
-  @MessagePattern('product-question.update')
+  @MessagePattern(PRODUCT_COMMANDS.QUESTION_UPDATE)
   async update(@Payload() updateProductQuestionDto: UpdateProductQuestionDto) {
     this.logger.debug(
-      `Updating product-question relationship with id: ${updateProductQuestionDto.id}`,
+      `Updating product-question relationship with id: ${updateProductQuestionDto.productQuestionId}`,
     );
     try {
       return await this.productQuestionService.update(updateProductQuestionDto);
     } catch (err) {
       this.logger.error(
-        `Error updating product-question relationship with id: ${updateProductQuestionDto.id}`,
+        `Error updating product-question relationship with id: ${updateProductQuestionDto.productQuestionId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;
@@ -154,7 +163,7 @@ export class ProductQuestionController {
    * @param id - Relationship ID
    * @returns Deleted product-question relationship
    */
-  @MessagePattern('product-question.remove')
+  @MessagePattern(PRODUCT_COMMANDS.QUESTION_REMOVE)
   async remove(@Payload('id') id: string) {
     this.logger.debug(`Removing product-question relationship with id: ${id}`);
     try {
@@ -174,7 +183,7 @@ export class ProductQuestionController {
    * @param productId - Product ID
    * @returns Number of deleted relationships
    */
-  @MessagePattern('product-question.removeByProductId')
+  @MessagePattern(PRODUCT_COMMANDS.QUESTION_REMOVE_BY_PRODUCT)
   async removeByProductId(@Payload('productId') productId: string) {
     this.logger.debug(
       `Removing all product-question relationships for productId: ${productId}`,

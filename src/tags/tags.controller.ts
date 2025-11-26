@@ -1,9 +1,14 @@
 import { Controller, Logger } from '@nestjs/common';
 import { TagsService } from './tags.service';
-import { CreateTagDto, UpdateTagDto, DeleteTagDto } from './dtos';
-import { PaginationDto } from '../common/dto/pagination.dto';
 import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
-import { SearchByNameDto } from './dtos/search-by-name.dto';
+import {
+  TAG_COMMANDS,
+  CreateTagDto,
+  UpdateTagDto,
+  DeleteTagDto,
+  SearchByNameDto,
+  PaginationDto,
+} from 'qeai-sdk';
 
 /**
  * Controller for managing tags.
@@ -24,7 +29,7 @@ export class TagsController {
    * @param createTagDto Tag creation data
    * @returns Created tag
    */
-  @MessagePattern('tags.create')
+  @MessagePattern(TAG_COMMANDS.CREATE)
   async create(@Payload() createTagDto: CreateTagDto) {
     this.logger.debug('Creating a new tag');
     try {
@@ -41,7 +46,7 @@ export class TagsController {
    * @param paginationDto Pagination parameters
    * @returns Paginated list of tags
    */
-  @MessagePattern('tags.findAll')
+  @MessagePattern(TAG_COMMANDS.FIND_ALL)
   async findAll(@Payload() paginationDto: PaginationDto) {
     this.logger.debug(
       `Fetching all tags. Page: ${paginationDto.page}, Limit: ${paginationDto.limit}`,
@@ -60,13 +65,16 @@ export class TagsController {
    * @param data name for search
    * @returns Array of matching tags
    */
-  @MessagePattern('tags.searchByName')
+  @MessagePattern(TAG_COMMANDS.SEARCH_BY_NAME)
   async searchByName(@Payload() searchByNameDto: SearchByNameDto) {
     this.logger.debug(`Searching tags by name: ${searchByNameDto.name}`);
     try {
       return await this.tagsService.searchByName(searchByNameDto);
     } catch (err) {
-      this.logger.error(`Error searching tags by name: ${searchByNameDto.name}`, err.stack);
+      this.logger.error(
+        `Error searching tags by name: ${searchByNameDto.name}`,
+        err.stack,
+      );
       if (err instanceof RpcException) throw err;
       throw new RpcException({ status: 500, message: err.message });
     }
@@ -77,7 +85,7 @@ export class TagsController {
    * @param limit (optional) max number of tags
    * @returns Array of most used tags
    */
-  @MessagePattern('tags.getMostUsed')
+  @MessagePattern(TAG_COMMANDS.GET_MOST_USED)
   async getMostUsed(@Payload('limit') limit?: number) {
     this.logger.debug(`Retrieving most used tags. Limit: ${limit}`);
     try {
@@ -85,7 +93,7 @@ export class TagsController {
     } catch (err) {
       this.logger.error('Error retrieving most used tags', err.stack);
       if (err instanceof RpcException) throw err;
-      this.logger.error('Creating Rpc Exception error')
+      this.logger.error('Creating Rpc Exception error');
       throw new RpcException({ status: 500, message: err.message });
     }
   }
@@ -95,7 +103,7 @@ export class TagsController {
    * @param productId Product ID to search tags for.
    * @returns Array of tags associated with the product.
    */
-  @MessagePattern('tags.findByProductId')
+  @MessagePattern(TAG_COMMANDS.FIND_BY_PRODUCT_ID)
   async findByProductId(@Payload('productId') productId: string) {
     this.logger.debug(`Retrieving tags for product ID: ${productId}`);
     try {
@@ -115,7 +123,7 @@ export class TagsController {
    * @param id ID of the tag to retrieve
    * @returns Tag details
    */
-  @MessagePattern('tags.findOne')
+  @MessagePattern(TAG_COMMANDS.FIND_ONE)
   async findOne(@Payload('id') id: string) {
     this.logger.debug(`Fetching tag with id: ${id}`);
     try {
@@ -132,14 +140,14 @@ export class TagsController {
    * @param updateTagDto Data containing ID and update information.
    * @returns Updated tag
    */
-  @MessagePattern('tags.update')
+  @MessagePattern(TAG_COMMANDS.UPDATE)
   async update(@Payload() updateTagDto: UpdateTagDto) {
-    this.logger.debug(`Updating tag with id: ${updateTagDto.id}`);
+    this.logger.debug(`Updating tag with id: ${updateTagDto.tagId}`);
     try {
       return await this.tagsService.update(updateTagDto);
     } catch (err) {
       this.logger.error(
-        `Error updating tag with id: ${updateTagDto.id}`,
+        `Error updating tag with id: ${updateTagDto.tagId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;
@@ -152,14 +160,14 @@ export class TagsController {
    * @param deleteTagDto Data containing ID and deletedBy info.
    * @returns Deleted (soft deleted) tag
    */
-  @MessagePattern('tags.remove')
+  @MessagePattern(TAG_COMMANDS.REMOVE)
   async remove(@Payload() deleteTagDto: DeleteTagDto) {
-    this.logger.debug(`Deleting tag with id: ${deleteTagDto.id}`);
+    this.logger.debug(`Deleting tag with id: ${deleteTagDto.tagId}`);
     try {
       return await this.tagsService.remove(deleteTagDto);
     } catch (err) {
       this.logger.error(
-        `Error deleting tag with id: ${deleteTagDto.id}`,
+        `Error deleting tag with id: ${deleteTagDto.tagId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;

@@ -1,11 +1,7 @@
 import { Controller, Logger } from '@nestjs/common';
 import { ProductSizeService } from './product-size.service';
-import {
-  CreateProductSizeDto,
-  ReplaceByProductIdDto,
-  UpdateProductSizeDto,
-} from './dtos';
 import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
+import { PRODUCT_COMMANDS, CreateProductSizeDto, ReplaceProductSizesByProductIdDto, UpdateProductSizeDto } from 'qeai-sdk';
 
 /**
  * Controller for managing product sizes.
@@ -28,7 +24,7 @@ export class ProductSizeController {
    * @param createProductSizeDto Object containing size creation data.
    * @returns Created product size.
    */
-  @MessagePattern('product-size.create')
+  @MessagePattern(PRODUCT_COMMANDS.SIZE_CREATE)
   async create(@Payload() createProductSizeDto: CreateProductSizeDto) {
     this.logger.debug('Creating a new product size');
     try {
@@ -45,7 +41,7 @@ export class ProductSizeController {
    * @param productId String identifier for the product.
    * @returns Array of product sizes.
    */
-  @MessagePattern('product-size.findByProductId')
+  @MessagePattern(PRODUCT_COMMANDS.SIZE_FIND_BY_PRODUCT)
   async findByProductId(@Payload('productId') productId: string) {
     this.logger.debug(`Finding all sizes for productId: ${productId}`);
     try {
@@ -65,8 +61,8 @@ export class ProductSizeController {
    * @param replaceByProductIdDto Object containing product ID, sizes array, and deletedBy.
    * @returns Array of created sizes.
    */
-  @MessagePattern('product-size.replaceByProductId')
-  async replaceByProductId(@Payload() replaceByProductIdDto: ReplaceByProductIdDto) {
+  @MessagePattern(PRODUCT_COMMANDS.SIZE_REPLACE_BY_PRODUCT)
+  async replaceByProductId(@Payload() replaceByProductIdDto: ReplaceProductSizesByProductIdDto) {
     this.logger.debug(
       `Replacing sizes for productId: ${replaceByProductIdDto.productId}`,
     );
@@ -87,7 +83,7 @@ export class ProductSizeController {
    * @param id String identifier for the product size.
    * @returns Product size details.
    */
-  @MessagePattern('product-size.findOne')
+  @MessagePattern(PRODUCT_COMMANDS.SIZE_FIND_ONE)
   async findOne(@Payload('id') id: string) {
     this.logger.debug(`Finding product size with id: ${id}`);
     try {
@@ -107,16 +103,16 @@ export class ProductSizeController {
    * @param updateProductSizeDto Object containing ID and update data.
    * @returns Updated product size.
    */
-  @MessagePattern('product-size.update')
+  @MessagePattern(PRODUCT_COMMANDS.SIZE_UPDATE)
   async update(@Payload() updateProductSizeDto: UpdateProductSizeDto) {
     this.logger.debug(
-      `Updating product size with id: ${updateProductSizeDto.id}`,
+      `Updating product size with id: ${updateProductSizeDto.productSizeId}`,
     );
     try {
       return await this.productSizeService.update(updateProductSizeDto);
     } catch (err) {
       this.logger.error(
-        `Error updating product size with id: ${updateProductSizeDto.id}`,
+        `Error updating product size with id: ${updateProductSizeDto.productSizeId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;
@@ -129,7 +125,7 @@ export class ProductSizeController {
    * @param id String identifier for the product size.
    * @returns Updated (soft-deleted) product size.
    */
-  @MessagePattern('product-size.remove')
+  @MessagePattern(PRODUCT_COMMANDS.SIZE_REMOVE)
   async remove(@Payload('id') id: string) {
     this.logger.debug(`Removing (soft) product size with id: ${id}`);
     try {
@@ -149,7 +145,7 @@ export class ProductSizeController {
    * @param productId String identifier for the product.
    * @returns Number of deleted sizes.
    */
-  @MessagePattern('product-size.removeByProductId')
+  @MessagePattern(PRODUCT_COMMANDS.SIZE_REMOVE_BY_PRODUCT)
   async removeByProductId(@Payload('productId') productId: string) {
     this.logger.debug(
       `Removing all product sizes for productId: ${productId}`,

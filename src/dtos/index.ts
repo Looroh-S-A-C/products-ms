@@ -3,8 +3,8 @@ export * from './create-product-size.dto';
 export * from './create-product-translation.dto';
 
 // Menu DTOs
-export * from './create-menu.dto';
-export * from './update-menu.dto';
+// export * from './create-menu.dto';
+// export * from './update-menu.dto';
 
 // MenuCategory DTOs
 export * from './create-menu-category.dto';

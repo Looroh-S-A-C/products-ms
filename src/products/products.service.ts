@@ -8,20 +8,30 @@ import {
 import {
   CreateProductDto,
   DeleteProductDto,
-  ProductStatus,
   UpdateProductDto,
-} from './dto';
-import { PrismaClient, QuestionProductType } from '@prisma/client';
-import { PaginationDto } from '../common/dto/pagination.dto';
+  PaginationDto,
+  SERVICES,
+  PRODUCT_EVENTS,
+  Product,
+  PaginationResponse,
+  SimpleProductResponse,
+  Question,
+} from 'qeai-sdk';
+import {
+  PrismaClient,
+  ProductStatus,
+  QuestionProductType,
+} from '@prisma/client';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
-import { EVENTS, NATS_SERVICE } from 'src/common/constants';
-import { firstValueFrom } from 'rxjs';
+import { productMap } from './mappers/product.map';
 
 @Injectable()
 export class ProductsService extends PrismaClient implements OnModuleInit {
   private readonly logger = new Logger(ProductsService.name);
 
-  constructor(@Inject(NATS_SERVICE) private readonly client: ClientProxy) {
+  constructor(
+    @Inject(SERVICES.NATS_SERVICE) private readonly client: ClientProxy,
+  ) {
     super();
   }
   onModuleInit() {
@@ -29,19 +39,23 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
     this.logger.log('Database connected');
   }
 
-  async create(createProductDto: CreateProductDto) {
+  async create(
+    createProductDto: CreateProductDto,
+  ): Promise<SimpleProductResponse> {
     const newProduct = await this.product.create({
       data: createProductDto,
     });
 
     this.logger.log('Emitting event to data-indexer-ms');
 
-    this.client.emit(EVENTS.PRODUCT_CREATED, { productId: newProduct.id });
+    this.client.emit(PRODUCT_EVENTS.CREATED, { productId: newProduct.id });
 
-    return newProduct;
+    return productMap(newProduct);
   }
 
-  async findAll(paginationDto: PaginationDto) {
+  async findAll(
+    paginationDto: PaginationDto,
+  ): Promise<PaginationResponse<SimpleProductResponse>> {
     const { limit, page } = paginationDto;
     const where = {
       status: ProductStatus.ACTIVE,
@@ -51,12 +65,13 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
       where,
     });
     const lastPage = Math.ceil(total / limit);
+    const products = await this.product.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: limit,
+    });
     return {
-      list: await this.product.findMany({
-        where,
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
+      list: products.map(productMap),
       meta: {
         total,
         page,
@@ -70,7 +85,7 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
    * @param id - The product ID.
    * @returns The complete product structure.
    */
-  async findOne(id: string) {
+  async findOne(id: string): Promise<Product> {
     const product = await this.product.findUnique({
       where: { id, deletedAt: null },
       include: {
@@ -133,7 +148,7 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
           },
         },
       },
-    }); 
+    });
 
     if (!product) {
       throw new RpcException({
@@ -145,20 +160,20 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
     const { tags, ...rest } = product;
 
     console.log({ product });
-    return await this.expandQuestionsRecursively({
-      ...rest,
-      tags: tags.map((tag) => ({ ...tag.tag })),
-    });
+    const fullProduct = await this.expandQuestionsRecursively(
+      productMap({ ...rest }),
+    );
+    return fullProduct;
   }
 
   /**
    * Recursively expand questions and answers for a given product or question.
-   * @param entity - The product or question entity to expand.
-   * @returns The entity with all nested questions and answers.
+   * @param product - The product or question product to expand.
+   * @returns The product with all nested questions and answers.
    */
-  private async expandQuestionsRecursively(entity: any): Promise<any> {
+  private async expandQuestionsRecursively(product: Product): Promise<Product> {
     const questionProducts = await this.questionProduct.findMany({
-      where: { productId: entity.id, itemType: QuestionProductType.QUESTION },
+      where: { productId: product.id, itemType: QuestionProductType.QUESTION },
       include: {
         question: {
           include: {
@@ -173,12 +188,14 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
       },
     });
 
-    const questions = await Promise.all(
+    const questions: Question[] = await Promise.all(
       questionProducts.map(async (qp) => {
         const question = qp.question;
-        const answers = question.questionProducts.map((ansQP) => ansQP.product);
+        const answers = question.questionProducts.map((ansQP) =>
+          productMap(ansQP.product),
+        );
 
-        const expandedAnswers = await Promise.all(
+        const expandedAnswers: Product[] = await Promise.all(
           answers.map((answer) => this.expandQuestionsRecursively(answer)),
         );
         const { questionProducts, ...cleanQuestion } = question;
@@ -190,36 +207,41 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
     );
 
     return {
-      ...entity,
+      ...product,
       questions,
     };
   }
 
-  async update(id: string, updateProductDto: UpdateProductDto) {
-    const { id: __, ...toUpdate } = updateProductDto;
-    await this.findOne(id);
+  async update(
+    updateProductDto: UpdateProductDto,
+  ): Promise<SimpleProductResponse> {
+    const { productId, ...toUpdate } = updateProductDto;
+    await this.findOne(productId);
     const product = await this.product.update({
-      where: { id },
+      where: { id: productId },
       data: toUpdate,
     });
-    this.client.emit(EVENTS.PRODUCT_UPDATED, { productId: product.id });
-    return product;
+    this.client.emit(PRODUCT_EVENTS.UPDATED, { productId: product.id });
+    return productMap(product);
   }
 
-  async remove(deleteProductDto: DeleteProductDto) {
-    const { id, deletedBy } = deleteProductDto;
-    await this.findOne(id);
-    return this.product.update({
-      where: { id },
+  async remove(
+    deleteProductDto: DeleteProductDto,
+  ): Promise<SimpleProductResponse> {
+    const { productId, deletedBy } = deleteProductDto;
+    await this.findOne(productId);
+    const product = await this.product.update({
+      where: { id: productId },
       data: {
         status: ProductStatus.INACTIVE,
         deletedBy,
         deletedAt: new Date(),
       },
     });
+    return productMap(product);
   }
 
-  async validateProducts(ids: string[]) {
+  async validateProducts(ids: string[]): Promise<Product[]> {
     ids = Array.from(new Set(ids));
 
     const products = await this.product.findMany({
@@ -296,12 +318,8 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
       });
     }
 
-    return products.map((product) => {
-      const { tags, ...rest } = product;
-      return {
-        ...rest,
-        tags: tags.map((tag) => ({ ...tag.tag })),
-      };
-    });
+    const productsMap = products.map(productMap);
+
+    return productsMap;
   }
 }

@@ -2,10 +2,14 @@ import { Injectable, Logger, OnModuleInit, HttpStatus } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import {
   CreateProductQuestionDto,
-  FindByProductIdAndTypeDto,
-  ReplaceByProductIdDto,
+  DeleteSubResourceResponseData,
+  FindProductQuestionByProductIdAndTypeDto,
+  QuestionRelationship,
+  ReplaceProductQuestionsByProductIdDto,
+  ReplaceSubResourceResponseData,
+  SubResourceResponseData,
   UpdateProductQuestionDto,
-} from './dtos';
+} from 'qeai-sdk';
 import { RpcException } from '@nestjs/microservices';
 
 /**
@@ -32,7 +36,9 @@ export class ProductQuestionService
    * @param createProductQuestionDto - Data for creating the relationship
    * @returns Created product-question relationship
    */
-  async create(createProductQuestionDto: CreateProductQuestionDto) {
+  async create(
+    createProductQuestionDto: CreateProductQuestionDto,
+  ): Promise<SubResourceResponseData<QuestionRelationship, 'relationship'>> {
     this.logger.log(
       `Creating product-question relationship for product: ${createProductQuestionDto.productId}`,
     );
@@ -40,6 +46,7 @@ export class ProductQuestionService
       const created = await this.questionProduct.create({
         data: createProductQuestionDto,
         select: {
+          product: { select: { name: true } },
           id: true,
           position: true,
           itemType: true,
@@ -55,7 +62,15 @@ export class ProductQuestionService
           },
         },
       });
-      return created;
+      const {
+        product: { name },
+        ...relationship
+      } = created;
+      return {
+        message: `product-question relationship for product: [${name}] was created successfully`,
+        productId: createProductQuestionDto.productId,
+        relationship,
+      };
     } catch (error) {
       this.logger.error(
         'Error creating product-question relationship',
@@ -74,7 +89,7 @@ export class ProductQuestionService
    * @param productId - Product ID
    * @returns Array of product-question relationships
    */
-  async findByProductId(productId: string) {
+  async findByProductId(productId: string): Promise<QuestionRelationship[]> {
     this.logger.log(
       `Finding all product-question relationships for productId: ${productId}`,
     );
@@ -113,7 +128,7 @@ export class ProductQuestionService
    * @param questionId - Question ID
    * @returns Array of product-question relationships
    */
-  async findByQuestionId(questionId: string) {
+  async findByQuestionId(questionId: string): Promise<QuestionRelationship[]> {
     this.logger.log(
       `Finding all product-question relationships for questionId: ${questionId}`,
     );
@@ -147,7 +162,7 @@ export class ProductQuestionService
    * @returns Product-question relationship details
    * @throws RpcException if relationship not found
    */
-  async findOne(id: string) {
+  async findOne(id: string): Promise<QuestionRelationship> {
     try {
       const productQuestion = await this.questionProduct.findUnique({
         where: { id },
@@ -186,13 +201,17 @@ export class ProductQuestionService
    * @param updateProductQuestionDto - Update data
    * @returns Updated product-question relationship
    */
-  async update(updateProductQuestionDto: UpdateProductQuestionDto) {
-    const { id, ...toUpdate } = updateProductQuestionDto;
-    await this.findOne(id); // Throws if not found.
-    this.logger.log(`Updating product-question relationship: ${id}`);
+  async update(
+    updateProductQuestionDto: UpdateProductQuestionDto,
+  ): Promise<QuestionRelationship> {
+    const { productQuestionId, ...toUpdate } = updateProductQuestionDto;
+    await this.findOne(productQuestionId); // Throws if not found.
+    this.logger.log(
+      `Updating product-question relationship: ${productQuestionId}`,
+    );
     try {
       const updated = await this.questionProduct.update({
-        where: { id },
+        where: { id: productQuestionId },
         data: toUpdate,
         select: {
           id: true,
@@ -213,7 +232,7 @@ export class ProductQuestionService
       return updated;
     } catch (error) {
       this.logger.error(
-        `Error updating product-question relationship with id: ${id}`,
+        `Error updating product-question relationship with id: ${productQuestionId}`,
         error.stack || error.message,
       );
       if (error instanceof RpcException) throw error;
@@ -230,14 +249,29 @@ export class ProductQuestionService
    * @param id - Relationship ID
    * @returns Deleted product-question relationship
    */
-  async remove(id: string) {
+  async remove(id: string): Promise<DeleteSubResourceResponseData> {
     await this.findOne(id);
     this.logger.log(`Deleting product-question relationship: ${id}`);
     try {
       const deleted = await this.questionProduct.delete({
         where: { id },
+        include: {
+          product: {
+            select: {
+              name: true,
+              id: true,
+            },
+          },
+        },
       });
-      return deleted;
+      const {
+        product: { name, id: productId },
+      } = deleted;
+      return {
+        message: `Question relationship for product [${name}] has been deleted successfully.`,
+        productId,
+        deletedCount: 1,
+      };
     } catch (error) {
       this.logger.error(
         `Error deleting product-question relationship with id: ${id}`,
@@ -257,7 +291,9 @@ export class ProductQuestionService
    * @param productId - Product ID
    * @returns Count of deleted relationships
    */
-  async removeByProductId(productId: string) {
+  async removeByProductId(
+    productId: string,
+  ): Promise<DeleteSubResourceResponseData> {
     this.logger.log(
       `Deleting all question relationships for product: ${productId}`,
     );
@@ -266,7 +302,7 @@ export class ProductQuestionService
         where: { productId },
       });
       return {
-        message: `${result.count} product-question relationships for product: ${productId} were deleted successfully`,
+        message: `${result.count} product-question relationships for product: [${productId}] were deleted successfully`,
         productId,
         deletedCount: result.count,
       };
@@ -293,7 +329,7 @@ export class ProductQuestionService
   async bulkCreate(
     productId: string,
     questions: Omit<CreateProductQuestionDto, 'productId'>[],
-  ) {
+  ): Promise<ReplaceSubResourceResponseData> {
     this.logger.log(
       `Bulk creating question relationships for product: ${productId}`,
     );
@@ -332,7 +368,9 @@ export class ProductQuestionService
    * @param replaceByProductId - Replace data with product ID and questions
    * @returns Message and count of created relationships
    */
-  async replaceByProductId(replaceByProductId: ReplaceByProductIdDto) {
+  async replaceByProductId(
+    replaceByProductId: ReplaceProductQuestionsByProductIdDto,
+  ): Promise<ReplaceSubResourceResponseData> {
     const { productId, questions } = replaceByProductId;
     this.logger.log(
       `Replacing all question relationships for product: ${productId}`,
@@ -362,30 +400,9 @@ export class ProductQuestionService
    * @returns Array of product-question relationships
    */
   async findByProductIdAndType(
-    findByProductIdAndTypeDto: FindByProductIdAndTypeDto,
-  ) {
+    findByProductIdAndTypeDto: FindProductQuestionByProductIdAndTypeDto,
+  ): Promise<QuestionRelationship[]> {
     const { productId, type } = findByProductIdAndTypeDto;
-    let include = {};
-    switch (type) {
-      case 'ANSWER':
-        include = {
-          product: {
-            include: {
-              translations: true,
-            },
-          },
-        };
-        break;
-      case 'QUESTION':
-        include = {
-          question: {
-            include: {
-              translations: true,
-            },
-          },
-        };
-        break;
-    }
     this.logger.log(
       `Finding product-question relationships for productId: ${productId} and type: ${type}`,
     );
@@ -399,7 +416,13 @@ export class ProductQuestionService
           productId: true,
           questionId: true,
         },
-        include,
+        include: {
+          question: {
+            include: {
+              translations: true,
+            },
+          },
+        },
         orderBy: { position: 'asc' },
       });
       return result;

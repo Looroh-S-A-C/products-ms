@@ -5,9 +5,11 @@ import {
   UpdateQuestionDto,
   DeleteQuestionDto,
   SearchByNameDto,
-} from './dtos';
-
-import { PaginationDto } from '../common/dto/pagination.dto';
+  PaginationDto,
+  Question,
+  PaginationResponse,
+  QuestionRelationship,
+} from 'qeai-sdk';
 import { RpcException } from '@nestjs/microservices';
 
 /**
@@ -31,7 +33,7 @@ export class QuestionsService extends PrismaClient implements OnModuleInit {
    * @param createQuestionDto - Data for creating the question
    * @returns Created question
    */
-  async create(createQuestionDto: CreateQuestionDto) {
+  async create(createQuestionDto: CreateQuestionDto): Promise<Question> {
     this.logger.log(`Creating question: ${createQuestionDto.name}`);
     return this.question.create({
       data: createQuestionDto,
@@ -43,7 +45,9 @@ export class QuestionsService extends PrismaClient implements OnModuleInit {
    * @param paginationDto - Pagination parameters
    * @returns Paginated list of questions
    */
-  async findAll(paginationDto: PaginationDto) {
+  async findAll(
+    paginationDto: PaginationDto,
+  ): Promise<PaginationResponse<Question>> {
     const { limit, page } = paginationDto;
     const where = {
       isActive: true,
@@ -53,16 +57,18 @@ export class QuestionsService extends PrismaClient implements OnModuleInit {
     const total = await this.question.count({ where });
     const lastPage = Math.ceil(total / limit);
 
+    const questions = await this.question.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: limit,
+      orderBy: { name: 'asc' },
+      include: {
+        translations: true,
+      },
+    });
+
     return {
-      list: await this.question.findMany({
-        where,
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy: { name: 'asc' },
-        include: {
-          translations: true,
-        },
-      }),
+      list: questions,
       meta: {
         total,
         page,
@@ -77,7 +83,7 @@ export class QuestionsService extends PrismaClient implements OnModuleInit {
    * @returns Question details
    * @throws NotFoundException if question not found
    */
-  async findOne(id: string) {
+  async findOne(id: string): Promise<Question> {
     const question = await this.question.findUnique({
       where: {
         id,
@@ -109,29 +115,29 @@ export class QuestionsService extends PrismaClient implements OnModuleInit {
    * @param updateQuestionDto - Update data
    * @returns Updated question
    */
-  async update(updateQuestionDto: UpdateQuestionDto) {
-    const { id, ...toUpdate } = updateQuestionDto;
-    await this.findOne(id);
+  async update(updateQuestionDto: UpdateQuestionDto): Promise<Question> {
+    const { questionId, ...toUpdate } = updateQuestionDto;
+    await this.findOne(questionId!);
 
-    this.logger.log(`Updating question: ${id}`);
+    this.logger.log(`Updating question: ${questionId}`);
     return this.question.update({
-      where: { id },
+      where: { id: questionId },
       data: toUpdate,
     });
   }
 
   /**
-   * Soft delete question by ID
+   * Soft delete question by questionId
    * @param deleteQuestionDto - Delete data including deletedBy
    * @returns Updated question
    */
-  async remove(deleteQuestionDto: DeleteQuestionDto) {
-    const { id, deletedBy } = deleteQuestionDto;
-    await this.findOne(id);
+  async remove(deleteQuestionDto: DeleteQuestionDto): Promise<Question> {
+    const { questionId, deletedBy } = deleteQuestionDto;
+    await this.findOne(questionId);
 
-    this.logger.log(`Soft deleting question: ${id}`);
+    this.logger.log(`Soft deleting question: ${questionId}`);
     return this.question.update({
-      where: { id },
+      where: { id: questionId },
       data: {
         isActive: false,
         deletedAt: new Date(),
@@ -146,7 +152,7 @@ export class QuestionsService extends PrismaClient implements OnModuleInit {
    * @returns Array of valid questions
    * @throws NotFoundException if any question not found
    */
-  async validateQuestions(ids: string[]) {
+  async validateQuestions(ids: string[]): Promise<Question[]> {
     const uniqueIds = Array.from(new Set(ids));
     const questions = await this.question.findMany({
       where: {
@@ -171,7 +177,7 @@ export class QuestionsService extends PrismaClient implements OnModuleInit {
    * @param type - Question type
    * @returns Array of questions of the specified type
    */
-  async findByType(type: QuestionType) {
+  async findByType(type: QuestionType): Promise<Question[]> {
     return this.question.findMany({
       where: {
         type,
@@ -190,24 +196,29 @@ export class QuestionsService extends PrismaClient implements OnModuleInit {
    * @param productId - Product ID
    * @returns Array of questions associated with the product
    */
-  async findByProductId(productId: string) {
-    return this.question.findMany({
+  async findByProductId(productId: string): Promise<QuestionRelationship[]> {
+    return this.questionProduct.findMany({
       where: {
-        questionProducts: {
-          some: {
-            productId,
+        productId,
+      },
+      select: {
+        id: true,
+        itemType: true,
+        position: true,
+        question: {
+          omit: {
+            createdAt: true,
+            updatedAt: true,
+            deletedAt: true,
+            createdBy: true,
+            updatedBy: true,
+            deletedBy: true,
           },
         },
-        isActive: true,
-        deletedAt: null,
       },
-      orderBy: { name: 'asc' },
-      include: {
-        translations: true,
-        questionProducts: {
-          where: {
-            productId,
-          },
+      orderBy: {
+        question: {
+          name: 'asc',
         },
       },
     });
@@ -218,7 +229,7 @@ export class QuestionsService extends PrismaClient implements OnModuleInit {
    * @param name - Name to search for
    * @returns Array of matching questions
    */
-  async searchByName(searchByNameDto: SearchByNameDto) {
+  async searchByName(searchByNameDto: SearchByNameDto): Promise<PaginationResponse<Question>> {
     const { name, page, limit } = searchByNameDto;
     const where = {
       isActive: true,
@@ -232,26 +243,28 @@ export class QuestionsService extends PrismaClient implements OnModuleInit {
           mode: 'insensitive',
         },
         ...where,
-      }
+      },
     });
     const lastPage = Math.ceil(total / limit);
 
+    const questions = await this.question.findMany({
+      where: {
+        name: {
+          contains: name,
+          mode: 'insensitive',
+        },
+        ...where,
+      },
+      skip: (page - 1) * limit,
+      take: limit,
+      orderBy: { name: 'asc' },
+      include: {
+        translations: true,
+      },
+    });
+
     return {
-      list: await this.question.findMany({
-        where: {
-          name: {
-            contains: name,
-            mode: 'insensitive',
-          },
-          ...where,
-        },
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy: { name: 'asc' },
-        include: {
-          translations: true,
-        },
-      }),
+      list: questions,
       meta: {
         total,
         page,

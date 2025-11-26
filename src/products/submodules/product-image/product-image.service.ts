@@ -1,23 +1,26 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  OnModuleInit,
-  HttpStatus,
-} from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, HttpStatus } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import {
   BulkCreateProductImageDto,
   CreateProductImageDto,
+  DeleteSubResourceResponseData,
+  ProductImage,
+  ReplaceSubResourceResponseData,
   SetPrimaryImageDto,
+  SubResourceResponseData,
   UpdateProductImageDto,
-} from './dtos';
+} from 'qeai-sdk';
 import { RpcException } from '@nestjs/microservices';
 
 /**
  * Service responsible for managing product images.
  * Handles CRUD operations for product images and provides robust error handling and logging.
  */
+type WriteProductImageResponse = SubResourceResponseData<
+  Omit<ProductImage, 'productId'>,
+  'image'
+>;
+
 @Injectable()
 export class ProductImageService extends PrismaClient implements OnModuleInit {
   private readonly logger = new Logger(ProductImageService.name);
@@ -35,7 +38,9 @@ export class ProductImageService extends PrismaClient implements OnModuleInit {
    * @param createProductImageDto Data for creating the image.
    * @returns Created product image.
    */
-  async create(createProductImageDto: CreateProductImageDto) {
+  async create(
+    createProductImageDto: CreateProductImageDto,
+  ): Promise<WriteProductImageResponse> {
     try {
       this.logger.log(
         `Creating product image for product: ${createProductImageDto.productId}`,
@@ -46,13 +51,11 @@ export class ProductImageService extends PrismaClient implements OnModuleInit {
           product: true,
         },
       });
+      const { product, productId, ...image } = created;
       return {
-        message: `Product image for product: [${created.product.name}] was created successfully`,
-        image: {
-          id: created.id,
-          url: created.url,
-          isPrimary: created.isPrimary,
-        },
+        message: `Product image for product: [${product.name}] was created successfully`,
+        productId,
+        image,
       };
     } catch (error) {
       this.logger.error(
@@ -71,7 +74,9 @@ export class ProductImageService extends PrismaClient implements OnModuleInit {
    * @param productId Product ID.
    * @returns Array of product images.
    */
-  async findByProductId(productId: string) {
+  async findByProductId(
+    productId: string,
+  ): Promise<Pick<ProductImage, 'id' | 'url' | 'isPrimary'>[]> {
     try {
       const images = await this.productImage.findMany({
         where: { productId },
@@ -101,7 +106,7 @@ export class ProductImageService extends PrismaClient implements OnModuleInit {
    * @returns Product image details.
    * @throws RpcException if product image not found.
    */
-  async findOne(id: string) {
+  async findOne(id: string): Promise<ProductImage> {
     try {
       const productImage = await this.productImage.findUnique({
         where: { id },
@@ -133,23 +138,27 @@ export class ProductImageService extends PrismaClient implements OnModuleInit {
    * @param updateProductImageDto Update data.
    * @returns Success message and updated product image.
    */
-  async update(updateProductImageDto: UpdateProductImageDto) {
-    const { id, ...toUpdate } = updateProductImageDto;
+  async update(
+    updateProductImageDto: UpdateProductImageDto,
+  ): Promise<WriteProductImageResponse> {
+    const { productImageId, ...toUpdate } = updateProductImageDto;
     try {
-      await this.findOne(id);
+      await this.findOne(productImageId);
 
-      this.logger.log(`Updating product image: ${id}`);
+      this.logger.log(`Updating product image: ${productImageId}`);
       const updated = await this.productImage.update({
-        where: { id },
+        where: { id: productImageId },
         data: toUpdate,
       });
+      const { productId, ...image } = updated;
       return {
         message: `Product image: ${updated.id} was updated successfully`,
-        image: updated,
+        productId,
+        image,
       };
     } catch (error) {
       this.logger.error(
-        `Error updating product image with id: ${id}`,
+        `Error updating product image with id: ${productImageId}`,
         error.stack || error.message,
       );
       if (error instanceof RpcException) throw error;
@@ -165,15 +174,23 @@ export class ProductImageService extends PrismaClient implements OnModuleInit {
    * @param id Product image ID.
    * @returns Success message.
    */
-  async remove(id: string) {
+  async remove(id: string): Promise<DeleteSubResourceResponseData> {
     try {
       await this.findOne(id);
       this.logger.log(`Deleting product image: ${id}`);
-      await this.productImage.delete({
+      const deleted = await this.productImage.delete({
         where: { id },
+        include: { product: true },
       });
+      const {
+        productId,
+        url,
+        product: { name },
+      } = deleted;
       return {
-        message: `Product image: ${id} was deleted successfully`,
+        message: `Product image: ${url} for product ${name}, was deleted  successfully`,
+        productId,
+        deletedCount: 1,
       };
     } catch (error) {
       this.logger.error(
@@ -193,7 +210,9 @@ export class ProductImageService extends PrismaClient implements OnModuleInit {
    * @param productId Product ID.
    * @returns Success message with number of deleted images.
    */
-  async removeByProductId(productId: string) {
+  async removeByProductId(
+    productId: string,
+  ): Promise<DeleteSubResourceResponseData> {
     try {
       this.logger.log(`Deleting all images for product: ${productId}`);
       const result = await this.productImage.deleteMany({
@@ -201,6 +220,8 @@ export class ProductImageService extends PrismaClient implements OnModuleInit {
       });
       return {
         message: `${result.count} images for product: ${productId} were deleted successfully`,
+        productId,
+        deletedCount: result.count,
       };
     } catch (error) {
       this.logger.error(
@@ -220,7 +241,9 @@ export class ProductImageService extends PrismaClient implements OnModuleInit {
    * @param setPrimaryImageDto DTO with imageId and productId.
    * @returns Success message and updated image.
    */
-  async setPrimary(setPrimaryImageDto: SetPrimaryImageDto) {
+  async setPrimary(
+    setPrimaryImageDto: SetPrimaryImageDto,
+  ): Promise<WriteProductImageResponse> {
     const { imageId, productId } = setPrimaryImageDto;
     try {
       this.logger.log(`Setting primary image for product: ${productId}`);
@@ -246,14 +269,12 @@ export class ProductImageService extends PrismaClient implements OnModuleInit {
         },
         data: { isPrimary: true },
       });
+      const { product, productId: id, ...image } = updated;
 
       return {
         message: `Image [${updated.url}] is now primary for product [${updated.product.name}]`,
-        image: {
-          id: updated.id,
-          url: updated.url,
-          isPrimary: updated.isPrimary,
-        },
+        productId,
+        image,
       };
     } catch (error) {
       this.logger.error(
@@ -272,7 +293,9 @@ export class ProductImageService extends PrismaClient implements OnModuleInit {
    * @param bulkCreateProductImageDto DTO containing productId and images.
    * @returns Success message with count of created images.
    */
-  async bulkCreate(bulkCreateProductImageDto: BulkCreateProductImageDto) {
+  async bulkCreate(
+    bulkCreateProductImageDto: BulkCreateProductImageDto,
+  ): Promise<ReplaceSubResourceResponseData> {
     const { images, productId } = bulkCreateProductImageDto;
     try {
       this.logger.log(`Bulk creating images for product: ${productId}`);
@@ -287,6 +310,8 @@ export class ProductImageService extends PrismaClient implements OnModuleInit {
       });
       return {
         message: `${count} images for product ${productId} have been created successfully.`,
+        productId,
+        createdCount: count,
       };
     } catch (error) {
       this.logger.error(

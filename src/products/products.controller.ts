@@ -1,10 +1,18 @@
 import { Controller, Logger } from '@nestjs/common';
 import { ProductsService } from './products.service';
-import { CreateProductDto } from './dto/create-product.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
-import { DeleteProductDto } from './dto/delete-product.dto';
-import { PaginationDto } from 'src/common';
-import { Ctx, MessagePattern, NatsContext, Payload, RpcException, Transport } from '@nestjs/microservices';
+import {
+  MessagePattern,
+  Payload,
+  RpcException,
+  Transport,
+} from '@nestjs/microservices';
+import {
+  PRODUCT_COMMANDS,
+  CreateProductDto,
+  UpdateProductDto,
+  DeleteProductDto,
+  PaginationDto,
+} from 'qeai-sdk';
 
 /**
  * Controller for managing products.
@@ -25,7 +33,7 @@ export class ProductsController {
    * @param createProductDto Product creation data
    * @returns Created product
    */
-  @MessagePattern('product.create')
+  @MessagePattern(PRODUCT_COMMANDS.CREATE)
   async create(@Payload() createProductDto: CreateProductDto) {
     this.logger.debug('Creating a new product');
     try {
@@ -43,7 +51,7 @@ export class ProductsController {
    * @param paginationDto Pagination parameters
    * @returns Paginated list of products
    */
-  @MessagePattern('product.find-all')
+  @MessagePattern(PRODUCT_COMMANDS.FIND_ALL)
   async findAll(@Payload() paginationDto: PaginationDto) {
     this.logger.debug(
       `Fetching all products. Page: ${paginationDto.page}, Limit: ${paginationDto.limit}`,
@@ -62,7 +70,7 @@ export class ProductsController {
    * @param id Product ID to retrieve
    * @returns Product details
    */
-  @MessagePattern('product.find-one')
+  @MessagePattern(PRODUCT_COMMANDS.FIND_ONE)
   async findOne(@Payload() id: string) {
     this.logger.debug(`Fetching product with id: ${id}`);
     try {
@@ -79,17 +87,16 @@ export class ProductsController {
    * @param updateProductDto Data containing ID and update information
    * @returns Updated product
    */
-  @MessagePattern('product.update')
+  @MessagePattern(PRODUCT_COMMANDS.UPDATE)
   async update(@Payload() updateProductDto: UpdateProductDto) {
-    this.logger.debug(`Updating product with id: ${updateProductDto.id}`);
+    this.logger.debug(
+      `Updating product with id: ${updateProductDto.productId}`,
+    );
     try {
-      return await this.productsService.update(
-        updateProductDto.id,
-        updateProductDto,
-      );
+      return await this.productsService.update(updateProductDto);
     } catch (err) {
       this.logger.error(
-        `Error updating product with id: ${updateProductDto.id}`,
+        `Error updating product with id: ${updateProductDto.productId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;
@@ -102,14 +109,16 @@ export class ProductsController {
    * @param deleteProductDto Data containing ID and deletedBy info
    * @returns Deleted (soft deleted) product
    */
-  @MessagePattern('product.delete')
+  @MessagePattern(PRODUCT_COMMANDS.DELETE)
   async remove(@Payload() deleteProductDto: DeleteProductDto) {
-    this.logger.debug(`Deleting product with id: ${deleteProductDto.id}`);
+    this.logger.debug(
+      `Deleting product with id: ${deleteProductDto.productId}`,
+    );
     try {
       return await this.productsService.remove(deleteProductDto);
     } catch (err) {
       this.logger.error(
-        `Error deleting product with id: ${deleteProductDto.id}`,
+        `Error deleting product with id: ${deleteProductDto.productId}`,
         err.stack,
       );
       if (err instanceof RpcException) throw err;
@@ -122,13 +131,14 @@ export class ProductsController {
    * @param ids Array of product IDs to validate
    * @returns Validation result
    */
-  @MessagePattern('product.validate_products', Transport.NATS, { queue: 'worker' })
+  @MessagePattern(PRODUCT_COMMANDS.VALIDATE_PRODUCTS, Transport.NATS, {
+    queue: 'worker',
+  })
   async validateProduct(@Payload() ids: string[]) {
-
     this.logger.debug(`Validating products with ids: ${ids.join(', ')}`);
     try {
       const products = await this.productsService.validateProducts(ids);
-      this.logger.log('Products were validated successfully');      
+      this.logger.log('Products were validated successfully');
       return products;
     } catch (err) {
       this.logger.error(

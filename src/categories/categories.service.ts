@@ -1,15 +1,13 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleInit,
-} from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import {
   CreateCategoryDto,
   UpdateCategoryDto,
   DeleteCategoryDto,
-} from './dtos';
-import { PaginationDto } from '../common';
+  PaginationDto,
+  Category,
+  PaginationResponse,
+} from 'qeai-sdk';
 import { RpcException } from '@nestjs/microservices';
 import { HttpStatus } from '@nestjs/common';
 
@@ -25,16 +23,19 @@ export class CategoriesService extends PrismaClient implements OnModuleInit {
   /**
    * Create a new category
    */
-  async create(createCategoryDto: CreateCategoryDto) {
-    return await this.category.create({
+  async create(createCategoryDto: CreateCategoryDto): Promise<Category> {
+    const category = await this.category.create({
       data: createCategoryDto,
     });
+    return category;
   }
 
   /**
    * Find all categories with pagination
    */
-  async findAll(paginationDto: PaginationDto) {
+  async findAll(
+    paginationDto: PaginationDto,
+  ): Promise<PaginationResponse<Category>> {
     const { limit, page } = paginationDto;
     const where = {
       status: true,
@@ -42,7 +43,7 @@ export class CategoriesService extends PrismaClient implements OnModuleInit {
     };
     const total = await this.category.count({ where });
     const lastPage = Math.ceil(total / limit);
-    return {
+    const categories: PaginationResponse<Category> = {
       list: await this.category.findMany({
         where,
         skip: (page - 1) * limit,
@@ -54,12 +55,13 @@ export class CategoriesService extends PrismaClient implements OnModuleInit {
         lastPage,
       },
     };
+    return categories;
   }
 
   /**
    * Find one category by ID
    */
-  async findOne(id: string) {
+  async findOne(id: string): Promise<Category> {
     const category = await this.category.findUnique({
       where: {
         id,
@@ -78,11 +80,11 @@ export class CategoriesService extends PrismaClient implements OnModuleInit {
   /**
    * Update a category
    */
-  async update(updateCategoryDto: UpdateCategoryDto) {
-    const { id, ...data } = updateCategoryDto;
-    await this.findOne(id);
+  async update(updateCategoryDto: UpdateCategoryDto): Promise<Category> {
+    const { categoryId, ...data } = updateCategoryDto;
+    await this.findOne(categoryId!);
     return this.category.update({
-      where: { id, deletedAt: null },
+      where: { id: categoryId, deletedAt: null },
       data,
     });
   }
@@ -90,11 +92,11 @@ export class CategoriesService extends PrismaClient implements OnModuleInit {
   /**
    * Soft delete a category
    */
-  async delete(deleteCategoryDto: DeleteCategoryDto) {
-    const { id, deletedBy } = deleteCategoryDto;
-    await this.findOne(id);
+  async delete(deleteCategoryDto: DeleteCategoryDto): Promise<Category> {
+    const { categoryId, deletedBy } = deleteCategoryDto;
+    await this.findOne(categoryId);
     return this.category.update({
-      where: { id },
+      where: { id: categoryId },
       data: {
         status: false,
         deletedBy: deletedBy,
