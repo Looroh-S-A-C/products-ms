@@ -4931,8 +4931,10 @@ pure-rand@^6.0.0, pure-rand@^6.1.0:
   resolved "https://registry.npmjs.org/pure-rand/-/pure-rand-6.1.0.tgz"
   integrity sha512-bVWawvoZoBYpp6yIoQtQXHZjmz35RSVHnUOTefl8Vcjr8snTPY1wnpSPMWekcFwbxI6gtmT7rSYPFvz71ldiOA==
 
-"qeai-sdk@file:../packages/qhay-interfaces":
-  version "2.0.2"
+qeai-sdk@^2.0.4:
+  version "2.0.4"
+  resolved "https://registry.yarnpkg.com/qeai-sdk/-/qeai-sdk-2.0.4.tgz#5c04a4c4e94048804c0f67b4a0549c97c50f0462"
+  integrity sha512-bnnwEnU7ntEgIq6+GatlPlM4SLfn8zIMs4NXfWZISLc1oQ5CMeYrEdF+w4WaAi+MdVluXRnCIhrrRcSXn+GKwQ==
   dependencies:
     "@nestjs/mapped-types" "^2.1.0"
     class-transformer "^0.5.1"
